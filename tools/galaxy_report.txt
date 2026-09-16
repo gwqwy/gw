@@ -1,0 +1,17 @@
+galaxy 生成报告 2026-09-11
+来源：https://github.com/uiverse-io/galaxy
+扫描 3802 · 收录 3388 · 纯Tailwind剔除 414 · 失败 0 · 去重 0
+
+按钮     buttons       1085
+卡片     cards         613
+复选框    checkboxes    157
+表单     forms         133
+输入框    inputs        190
+通知     notifications 23
+装饰     patterns      103
+单选     radios        96
+开关     toggles       241
+提示框    tooltips      49
+加载动画   loaders       698
+
+数据体积：8.6 MB

@@ -1,0 +1,16 @@
+# .NET 构建产物
+M3EDesigner/bin/
+M3EDesigner/obj/
+
+# 发布产物（通过 GitHub Releases 页面上传，不进 git）
+release/
+
+# Node 依赖与可再生的上游克隆（tools/gengalaxy.mjs 重新生成 gx/ 数据用）
+node_modules/
+tools/galaxy/
+
+# 系统与临时文件
+Thumbs.db
+.DS_Store
+*.tmp
+~$*

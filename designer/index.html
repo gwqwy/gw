@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<title>gw Designer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/designer.css"/>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="logo"><span class="logo-dot"></span>gw <b>Designer</b></div>
+  <div class="proj" id="projName" title="点击修改设计名称">未命名设计</div>
+  <span class="vsep"></span>
+  <button class="tbtn" id="btnNew" title="新建"><span class="m3e-ic" data-ic="add_box"></span>新建</button>
+  <button class="tbtn" id="btnOpen" title="打开 (Ctrl+O)"><span class="m3e-ic" data-ic="folder_open"></span>打开</button>
+  <button class="tbtn" id="btnSave" title="保存项目 (Ctrl+S)"><span class="m3e-ic" data-ic="save"></span>保存</button>
+  <span class="vsep"></span>
+  <button class="ibtn" id="btnUndo" title="撤销 (Ctrl+Z)"><span class="m3e-ic" data-ic="undo"></span></button>
+  <button class="ibtn" id="btnRedo" title="重做 (Ctrl+Shift+Z)"><span class="m3e-ic" data-ic="redo"></span></button>
+  <span class="vsep"></span>
+  <button class="ibtn on" id="toolSelect" title="选择工具"><span class="m3e-ic" data-ic="select_all"></span></button>
+  <button class="ibtn" id="toolHand" title="平移画布（或按住鼠标中键拖动）"><span class="m3e-ic" data-ic="pan_tool"></span></button>
+  <span class="vsep"></span>
+  <button class="ibtn" id="btnZoomOut" title="缩小"><span class="m3e-ic" data-ic="zoom_out"></span></button>
+  <span id="zoomPct">100%</span>
+  <button class="ibtn" id="btnZoomIn" title="放大"><span class="m3e-ic" data-ic="zoom_in"></span></button>
+  <button class="tbtn" id="btnFit" title="适应窗口 (0)"><span class="m3e-ic" data-ic="fit_screen"></span>适应</button>
+  <span class="spacer"></span>
+  <button class="tbtn" id="btnTheme" title="主题（配色/深色/形状）"><span class="m3e-ic" data-ic="palette"></span>主题</button>
+  <button class="tbtn" id="btnPreview" title="程序内预览 (P)"><span class="m3e-ic" data-ic="visibility"></span>预览</button>
+  <button class="tbtn primary" id="btnExport" title="导出全部文件（HTML/Vue/提示词/项目）"><span class="m3e-ic" data-ic="download"></span>导出全部</button>
+</header>
+
+<div id="main">
+  <aside id="left">
+    <div class="pal-search">
+      <span class="m3e-ic" data-ic="search"></span>
+      <input id="palSearch" placeholder="搜索组件…" autocomplete="off"/>
+    </div>
+    <div id="leftBody">
+      <div id="catRail"></div>
+      <div id="palMain"><div id="palette"></div></div>
+    </div>
+  </aside>
+
+  <div id="center">
+    <div id="viewport">
+      <div id="world"></div>
+      <div id="guides"></div>
+      <div id="selbox"></div>
+      <div id="marquee"></div>
+    </div>
+    <div id="statusbar">
+      <button class="tbtn small" id="btnAddPhone" title="添加手机屏幕 412×892"><span class="m3e-ic" data-ic="devices"></span>手机屏幕</button>
+      <button class="tbtn small" id="btnAddDesktop" title="添加桌面屏幕 1280×800"><span class="m3e-ic" data-ic="desktop_windows"></span>桌面屏幕</button>
+      <span class="hint">拖入组件 · 滚轮/Shift+滚轮平移 · Ctrl+滚轮缩放 · 空格+拖拽移动画布 · 右键可编组/复制代码</span>
+      <span class="spacer"></span>
+      <span id="statPages"></span>
+      <span id="statSel"></span>
+    </div>
+  </div>
+
+  <aside id="right">
+    <div id="rightTabs">
+      <button id="rtDesign" class="on" title="屏幕 / 属性 / 图层">设计</button>
+      <button id="rtCode" title="HTML / Vue / 提示词 / JSON 代码生成">代码</button>
+    </div>
+    <div id="rightDesign">
+      <div class="panel-sec">
+        <div class="sec-t"><span class="m3e-ic" data-ic="devices"></span>页面（按跳转关系分层）
+          <span class="spacer"></span>
+          <button class="ibtn s" id="pgNew" title="新建手机页面"><span class="m3e-ic" data-ic="add"></span></button>
+        </div>
+        <div id="pageList"></div>
+      </div>
+      <div class="panel-sec grow">
+        <div class="sec-t"><span class="m3e-ic" data-ic="bolt"></span>属性</div>
+        <div id="insp"></div>
+      </div>
+      <div class="panel-sec">
+        <div class="sec-t"><span class="m3e-ic" data-ic="layers"></span>图层
+          <span class="spacer"></span>
+          <button class="ibtn s" id="lyNew" title="新建空图层（选中组件后在属性面板「所属图层」加入）"><span class="m3e-ic" data-ic="add"></span></button>
+          <button class="ibtn s" id="lyTop" title="置顶"><span class="m3e-ic" data-ic="upload"></span></button>
+          <button class="ibtn s" id="lyUp" title="上移一层"><span class="m3e-ic" data-ic="arrow_upward"></span></button>
+          <button class="ibtn s" id="lyDown" title="下移一层"><span class="m3e-ic" data-ic="arrow_downward"></span></button>
+          <button class="ibtn s" id="lyBottom" title="置底"><span class="m3e-ic" data-ic="download"></span></button>
+        </div>
+        <div id="layers"></div>
+      </div>
+    </div>
+    <div id="rightCode">
+      <div class="code-v-head">
+        <div id="codeTabs">
+          <button data-tab="html" class="on">HTML</button>
+          <button data-tab="vue">Vue</button>
+          <button data-tab="prompt">提示词</button>
+          <button data-tab="json">JSON</button>
+        </div>
+        <select id="codeScope" title="生成范围">
+          <option value="sel">选中组件</option>
+          <option value="page" selected>当前页面</option>
+          <option value="all">全部设计</option>
+        </select>
+        <select id="promptTarget" title="提示词目标平台">
+          <option value="vue">目标：Vue 3</option>
+          <option value="html">目标：纯 HTML</option>
+          <option value="web">目标：通用 Web</option>
+        </select>
+        <div class="btnrow" style="margin:2px 0 0;">
+          <button class="mini" id="codeCopy"><span class="m3e-ic" data-ic="content_copy"></span>复制</button>
+          <button class="mini" id="codeSave"><span class="m3e-ic" data-ic="save"></span>保存文件</button>
+        </div>
+        <span id="codeInfo"></span>
+      </div>
+      <textarea id="codeArea" readonly spellcheck="false"></textarea>
+    </div>
+  </aside>
+</div>
+
+<div id="themepanel"></div>
+<div id="exportpanel">
+  <div class="sec-t"><span class="m3e-ic" data-ic="download"></span>选择导出格式</div>
+  <label class="exp-opt"><input type="checkbox" data-x="html" checked/><span></span><span class="m3e-ic" data-ic="code"></span>HTML 文件<small>每屏一个 + index</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="vue" checked/><span></span><span class="m3e-ic" data-ic="data_object"></span>Vue 3 组件<small>每屏一个 .vue</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="prompt" checked/><span></span><span class="m3e-ic" data-ic="text_snippet"></span>AI 提示词<small>提示词.md</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="project" checked/><span></span><span class="m3e-ic" data-ic="save"></span>项目文件<small>.m3ed 可再次编辑</small></label>
+  <div class="btnrow"><button class="mini primary" id="doExport"><span class="m3e-ic" data-ic="folder_open"></span>导出到文件夹…</button></div>
+  <div class="hint">HTML / Vue 可直接运行；提示词可粘贴给 Claude Code、Cursor 等 AI 工具。</div>
+</div>
+
+<div id="previewOverlay">
+  <div class="pv-head">
+    <span class="ttl"><span class="m3e-ic" data-ic="visibility"></span>程序内预览</span>
+    <select id="pvPageSel" title="选择要预览的屏幕"></select>
+    <span class="spacer"></span>
+    <button class="mini" id="pvOpenBrowser" title="在系统浏览器中打开此屏幕"><span class="m3e-ic" data-ic="open_in_new"></span>在浏览器打开</button>
+    <button class="mini" id="pvClose"><span class="m3e-ic" data-ic="close"></span>关闭预览 (Esc)</button>
+  </div>
+  <div class="pv-body"><iframe id="pvFrame"></iframe></div>
+</div>
+
+<div id="ctxmenu"></div>
+<div id="toast"></div>
+
+<script src="js/icons.js"></script>
+<script src="js/tokens.js"></script>
+<script src="js/m3estyle.js"></script>
+<script src="js/registry.js"></script>
+<script src="js/uiverse.js"></script>
+<script src="js/scope.js"></script>
+<script src="js/gx/manifest.js"></script>
+<script src="js/gx.js"></script>
+<script src="js/codegen.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

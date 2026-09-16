@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>gw</AssemblyName>
+    <RootNamespace>M3EDesigner</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>gw Designer</Product>
+    <AssemblyTitle>gw Designer — M3E 可视化低代码设计器</AssemblyTitle>
+    <Description>类 Axure 的 Material 3 Expressive 可视化低代码前端页面设计器（基于 m3e-canvas 组件体系），可生成 HTML / Vue / AI 提示词。</Description>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <!-- 设计器网页资源 → 输出目录 www/ -->
+  <ItemGroup>
+    <Content Include="..\designer\**\*" Link="www\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
