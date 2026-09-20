@@ -179,7 +179,10 @@ public partial class MainWindow : Window
         Web.CoreWebView2.NewWindowRequested += (s, e) =>
         {
             e.Handled = true;
-            Process.Start(new ProcessStartInfo(e.Uri) { UseShellExecute = true });
+            // 只放行 http/https 外链：Uri 来自网页内容，不能用 file:/自定协议处理器打开
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
         };
 
         Web.CoreWebView2.NavigationStarting += (s, e) =>

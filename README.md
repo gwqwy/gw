@@ -110,6 +110,15 @@ dotnet publish -c Release -r win-x64 --self-contained true ^
 
 开发调试：`dotnet run`（会自动把 designer/ 复制到输出目录）。
 
+### CI 构建（GitHub Actions）
+
+推送到 `main`、PR 或手动触发（workflow_dispatch）时，[.github/workflows/build.yml](.github/workflows/build.yml) 会：
+
+1. 在 Ubuntu 上跑 `node tools/test_codegen.cjs` 自测；
+2. 在 Windows 运行器上 `dotnet publish` 单文件自包含版，校验 `gw.exe` 与 `www/` 齐全后打包 `gw-<分支或标签名>.zip` 上传为 Artifact。
+
+推送 `v*` 标签（如 `v1.0.1`）时会额外自动创建 GitHub Release 并附上 `gw-<tag>.zip`（对应 `release/` 的手工发布流程）。
+
 ## 后续添加组件（重要）
 
 组件是**数据驱动**的，新增一种组件不需要改画布/导出/面板的任何代码：

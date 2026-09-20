@@ -1,0 +1,77 @@
+# gw Designer — CI 构建流水线
+#
+# - 推送 main / PR / 手动触发：跑代码生成自测（tools/test_codegen.cjs），
+#   然后在 Windows 运行器上 dotnet publish 单文件自包含版，打包 zip 上传为 Artifact。
+# - 推送 v* 标签：额外自动创建 GitHub Release 并附上 gw-<tag>.zip（取代手工上传）。
+#
+# 产物布局与本地发布一致：gw.exe + www/（由 csproj 的 Content 项自动从 designer/ 拷贝）。
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # 仅 v* 标签创建 Release 时需要
+
+jobs:
+  test:
+    name: 代码生成自测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 运行 tools/test_codegen.cjs
+        run: node tools/test_codegen.cjs
+
+  build:
+    name: 构建 Windows 桌面版
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 发布单文件自包含版
+        run: >
+          dotnet publish M3EDesigner/M3EDesigner.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+
+      - name: 打包 zip
+        shell: pwsh
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          $zip = 'gw-' + ($env:REF -replace '/', '-') + '.zip'
+          New-Item -ItemType Directory -Path dist/gw -Force | Out-Null
+          Copy-Item M3EDesigner/bin/Release/net8.0-windows/win-x64/publish/* dist/gw/ -Recurse
+          if (-not (Test-Path 'dist/gw/gw.exe')) { throw 'gw.exe 未生成，发布失败' }
+          if (-not (Test-Path 'dist/gw/www/index.html')) { throw 'www/index.html 缺失，网页资源未拷贝' }
+          Compress-Archive -Path dist/gw -DestinationPath $zip -Force
+          "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Get-ChildItem dist/gw | Format-Table Name, Length -AutoSize
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw-windows-x64
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+      - name: 创建 GitHub Release（仅 v* 标签）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          generate_release_notes: true
