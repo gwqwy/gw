@@ -8,7 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>gw</AssemblyName>
     <RootNamespace>M3EDesigner</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>gw Designer</Product>
     <AssemblyTitle>gw Designer — M3E 可视化低代码设计器</AssemblyTitle>
     <Description>类 Axure 的 Material 3 Expressive 可视化低代码前端页面设计器（基于 m3e-canvas 组件体系），可生成 HTML / Vue / AI 提示词。</Description>

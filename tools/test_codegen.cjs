@@ -19,8 +19,8 @@ const ok = (cond, name) => { console.log((cond ? "  ✓ " : "  ✗ ") + name); i
 
 /* 注册表完整性 */
 console.log("== 注册表 ==");
-ok(REG.order.length === 61, `61 种组件（实际 ${REG.order.length}）`);
-ok(Object.keys(REG.defs).length === 61, `defs 全部定义（实际 ${Object.keys(REG.defs).length}）`);
+ok(REG.order.length === 67, `67 种组件（实际 ${REG.order.length}）`);
+ok(Object.keys(REG.defs).length === 67, `defs 全部定义（实际 ${Object.keys(REG.defs).length}）`);
 for (const k of REG.order) {
   const d = REG.defs[k];
   if (!d || !d.spec || !d.render || !d.desc || !d.cat) { ok(false, `${k} 定义不完整`); }
@@ -105,6 +105,8 @@ ok((html.match(/m3e-item/g) || []).length >= 34, `条目数 ≥34（${(html.matc
 ok(!html.includes("undefined"), "无 undefined 泄漏");
 ok(html.includes("data-act=\"toggle\""), "交互开关已注入");
 ok(html.includes(`data-link="${q.id}"`), "页面跳转已注入");
+ok(html.includes("data-act=\"tabs\"") && html.includes("data-tab"), "页签交互已注入（data-act/data-tab）");
+ok(/<div class="m3e-bnav" data-act="tabs"/.test(html) || /<div data-act="tabs" class="m3e-bnav"/.test(html), "导航栏根元素带 tabs 交互标记");
 ok(html.includes("--pri:#6750A4"), "配色变量已注入");
 ok(!/[<>]&/.test(html.replace(/&(amp|lt|gt|quot|#39);/g, "")), "无转义错误");
 fs.writeFileSync(path.join(__dirname, "out_sample.html"), html);
@@ -116,11 +118,56 @@ ok(vue.includes("<template>") && vue.includes("<script setup>") && vue.includes(
 ok(vue.includes("ref("), "含响应式状态");
 ok(vue.includes(":class=\"{on:"), "开关绑定已生成");
 ok(vue.includes(":class=\"{sel: sel_"), "页签绑定已生成");
+ok(vue.includes('<div class="dest" :class="{sel: sel_'), "导航栏子项带 .dest class（样式可挂载）");
 ok(!vue.includes("undefined"), "无 undefined 泄漏");
 fs.writeFileSync(path.join(__dirname, "out_sample.vue"), vue);
 const vueQ = GEN.vueSFC(q, design);
 ok(vueQ.includes("1280"), "桌面页尺寸正确");
 fs.writeFileSync(path.join(__dirname, "out_sample_desktop.vue"), vueQ);
+
+/* 弹窗图层 + Vue：回归（此前弹窗成员全量重渲染导致 ref 重复声明、跨弹窗串组） */
+console.log("== 弹窗图层（Vue 回归） ==");
+const pp = T.defaultPage("弹窗页", "phone");
+const g1 = { id: "g1id", name: "弹窗一", popup: true }, g2 = { id: "g2id", name: "弹窗二", popup: true };
+pp.groups = [g1, g2];
+const mkItem = kind => REG.create(kind, 8, 8, design.theme);
+const plain = mkItem("switch");                 // 页面级开关
+const m1 = mkItem("switch"); m1.gid = "g1id";   // 弹窗一成员
+const m2 = mkItem("checkbox"); m2.gid = "g2id"; // 弹窗二成员
+pp.items.push(plain, m1, m2);
+const vueP = GEN.vueSFC(pp, design);
+const itemRefs = (vueP.match(/const u\w+ = ref\(/g) || []).length;
+ok(itemRefs === 3, `交互组件 ref 声明无重复（${itemRefs}/3）`);
+ok((vueP.match(/const pop_\w+ = ref\(/g) || []).length === 2, "两个弹窗各一个开关 ref");
+const swCount = (vueP.match(/class="m3e-sw/g) || []).length;
+const cbCount = (vueP.match(/class="m3e-cb/g) || []).length;
+ok(swCount === 2 && cbCount === 1, `弹窗成员不串组（switch ${swCount}/2，checkbox ${cbCount}/1）`);
+ok(vueP.indexOf("m3e-popup") < vueP.indexOf("pop_g1id") || vueP.includes("popupRefs"), "弹窗 ref 已接线");
+
+/* 步骤条 / 新组件的 Vue 结构 */
+const sp = T.defaultPage("结构页", "phone");
+const stIt = mkItem("stepper");
+const tlIt = mkItem("timeline");
+const segIt = mkItem("segmented");
+const bcIt = mkItem("breadcrumb");
+const taIt = mkItem("textarea"); taIt.variant = "outlined";
+const qtIt = mkItem("quote");
+const cbIt = mkItem("codeBlock");
+sp.items.push(stIt, tlIt, segIt, bcIt, taIt, qtIt, cbIt);
+const vueS = GEN.vueSFC(sp, design);
+ok(vueS.includes("m3e-stepper"), "步骤条保持自身结构（不被重建成普通页签）");
+ok(vueS.includes('class="m3e-seg"') && vueS.includes("{sel: sel_u"), "分段按钮按页签交互生成");
+ok(vueS.includes('class="m3e-bc"'), "面包屑按页签交互生成");
+ok(vueS.includes("m3e-tline") && vueS.includes("m3e-ta v-outlined") && vueS.includes("m3e-quote") && vueS.includes("m3e-codeblk"), "时间线/多行输入/引用块/代码块静态渲染正常");
+/* 新组件渲染抽查 */
+const segH = REG.defs.segmented.render(Object.assign(mkItem("segmented"), { segTight: true }));
+ok(segH.includes('class="m3e-seg outline"'), "分段按钮描边样式可切换");
+const bcH = REG.defs.breadcrumb.render(mkItem("breadcrumb"));
+ok(bcH.includes('class="bh"') && bcH.includes('class="bc sel"'), "面包屑含首页图标与选中态");
+const cbH2 = REG.defs.codeBlock.render(mkItem("codeBlock"));
+ok(cbH2.includes('class="lang"') && cbH2.includes("<pre>"), "代码块带语言角标");
+const tlH = REG.defs.timeline.render(Object.assign(mkItem("timeline"), { tlLine: "dashed" }));
+ok(tlH.includes("dashed") && tlH.includes('class="dot"'), "时间线虚线连线可切换");
 
 /* 提示词 */
 console.log("== 提示词 ==");
@@ -144,6 +191,9 @@ ok(snipVue.includes("data-act=\"toggle\"") === false && snipVue.includes("@click
 const j = JSON.parse(snipJson);
 ok(j.__m3eBlock === 1 && j.item.kind === "switch", "JSON 块可回贴");
 ok(!("_theme" in j.item), "JSON 块无运行时字段");
+const snipTabsVue = GEN.itemSnippet(p.items.find(i => i.kind === "tabs"), design, "vue");
+ok(snipTabsVue.includes("@click") && snipTabsVue.includes(':class="{sel: sel_'), "页签组件 Vue 片段带交互绑定");
+ok(!GEN.itemSnippet(p.items.find(i => i.kind === "stepper"), design, "vue").includes("@click"), "步骤条 Vue 片段保持静态");
 
 /* 深色方案 */
 console.log("== 深色模式 ==");
