@@ -179,6 +179,7 @@
   REG.add({
     kind: "fabMenu", name: "FAB 菜单", cat: "actions", icon: "add_circle",
     inter: "tabs",
+    tabsMeta: it => ({ wrap: `m3e-fabmenu v-${it.variant || "tonal"}`, child: "mi" }),
     sig: "expand",
     spec: { w: 220, h: 72, variant: "tonal", icon: "close", expand: "up", tabs: [{ icon: "edit", label: "笔记" }] },
     props: ["tabs", "variant"],
@@ -209,6 +210,25 @@
   });
 
   REG.add({
+    kind: "segmented", name: "分段按钮", cat: "actions", icon: "view_week",
+    inter: "tabs",
+    tabsMeta: it => ({ wrap: `m3e-seg${it.segTight ? " outline" : ""}`, child: "sg" }),
+    sig: "segTight",
+    spec: {
+      w: 240, h: 40, selected: 0, segTight: false,
+      tabs: [{ icon: "", label: "日" }, { icon: "", label: "周" }, { icon: "", label: "月" }],
+    },
+    props: ["tabs", "selected"], tabsName: "段", propLabels: { selected: "当前选中" },
+    propDefs: [{ k: "segTight", label: "描边样式（不填充选中底色）", type: "chk" }],
+    render(it) {
+      const ds = tabsOf(it).map((t, i) =>
+        `<div class="sg${i === it.selected ? " sel" : ""}">${t.icon ? ic(t.icon, 18) : ""}<span>${esc(t.label)}</span></div>`).join("");
+      return `<div class="m3e-seg${it.segTight ? " outline" : ""}">${ds}</div>`;
+    },
+    desc: it => `一组${it.segTight ? "描边" : "填充"}分段按钮：${tabsOf(it).map(t => t.label).join("、")}，当前选中「${(tabsOf(it)[it.selected] || {}).label || ""}」`,
+  });
+
+  REG.add({
     kind: "topAppBar", name: "顶部应用栏", cat: "navigation", icon: "toolbar",
     sig: "centerT",
     spec: { w: T.PHONE_W, h: T.APPBAR_H, label: "标题", icon: "menu", icon2: "more_vert", centerT: false },
@@ -223,6 +243,7 @@
   REG.add({
     kind: "bottomNav", name: "导航栏", cat: "navigation", icon: "bottom_navigation",
     inter: "tabs",
+    tabsMeta: it => ({ wrap: "m3e-bnav", child: "dest", ind: true, label: it.hideLb ? "" : "dl" }),
     sig: "hideLb",
     spec: {
       w: T.PHONE_W, h: T.BOTTOMNAV_H, selected: 0, hideLb: false,
@@ -241,6 +262,7 @@
   REG.add({
     kind: "navRail", name: "侧边导航栏", cat: "navigation", icon: "side_navigation",
     inter: "tabs",
+    tabsMeta: it => ({ wrap: "m3e-rail", child: "dest", ind: true, label: "dl", pre: `<div class="hd">${ic("menu", 24)}</div>` }),
     sig: "hideHd",
     spec: {
       w: 80, h: T.PHONE_H, selected: 0, hideHd: false,
@@ -277,6 +299,7 @@
   REG.add({
     kind: "tabs", name: "标签页", cat: "navigation", icon: "tab",
     inter: "tabs",
+    tabsMeta: it => ({ wrap: `m3e-tabs${it.indStyle === "underline" ? " underline" : ""}`, child: "tab" }),
     sig: "indStyle",
     spec: { w: T.PHONE_W, h: 48, selected: 0, indStyle: "pill", tabs: [{ icon: "", label: "推荐" }, { icon: "", label: "关注" }, { icon: "", label: "热门" }, { icon: "", label: "最新" }] },
     props: ["tabs", "selected"],
@@ -334,7 +357,7 @@
     kind: "box", name: "容器框", cat: "containment", icon: "web_asset",
     sig: "frame",
     spec: { w: T.PHONE_W, h: 220, fill: "surfaceContainerLow", radius: 28, frame: "none" },
-    props: ["fill", "radius"],
+    props: ["fill"], /* 圆角由属性面板的通用「圆角」字段覆盖，不在此重复 */
     propDefs: [{ k: "frame", label: "边框样式", type: "sel", opts: [["none", "无"], ["line", "实线"], ["dash", "虚线（占位区）"]] }],
     fillList: FILL_TOKENS,
     render(it) {
@@ -576,6 +599,20 @@
   });
 
   REG.add({
+    kind: "textarea", name: "多行输入框", cat: "inputs", icon: "subject",
+    inter: "input",
+    sig: "taRows",
+    spec: { w: T.CONTENT_W, h: 120, variant: "filled", label: "备注", value: "", taRows: 4 },
+    props: ["label", "value", "variant"], variantList: VARIANTS.textField,
+    propDefs: [{ k: "taRows", label: "设计行数", type: "num", min: 2, max: 8 }],
+    render(it) {
+      const shown = it.value ? esc(it.value) : `<span style="opacity:.45;">请输入内容…</span>`;
+      return `<div class="m3e-ta v-${it.variant || "filled"}">${it.label ? `<span class="cap">${esc(it.label)}</span>` : ""}<span class="val">${shown}</span></div>`;
+    },
+    desc: it => `一个多行文本输入框，标签「${it.label}」，${it.value ? `内容「${it.value}」` : "空值占位"}（约 ${it.taRows || 4} 行，${VN[it.variant] || it.variant}样式）`,
+  });
+
+  REG.add({
     kind: "text", name: "文本", cat: "content", icon: "title",
     sig: "align",
     spec: { w: 160, h: 40, label: "标题", size: 28, bold: false, align: "left" },
@@ -788,8 +825,29 @@
   });
 
   REG.add({
+    kind: "breadcrumb", name: "面包屑", cat: "navigation", icon: "double_arrow",
+    inter: "tabs",
+    tabsMeta: it => ({ wrap: "m3e-bc", child: "bc", pre: it.bcHome ? ic("home", 16) : "" }),
+    sig: "bcHome",
+    spec: {
+      w: 280, h: 40, selected: 2, bcHome: true,
+      tabs: [{ icon: "", label: "首页" }, { icon: "", label: "分类" }, { icon: "", label: "详情" }],
+    },
+    props: ["tabs", "selected"], tabsName: "层级", tabsHideIcon: true, propLabels: { selected: "当前页" },
+    propDefs: [{ k: "bcHome", label: "首位小房子图标", type: "chk" }],
+    render(it) {
+      const home = it.bcHome ? `<span class="bh">${ic("home", 16)}</span>` : "";
+      const ds = tabsOf(it).map((t, i) =>
+        `<span class="bc${i === it.selected ? " sel" : ""}">${esc(t.label)}</span>`).join("");
+      return `<div class="m3e-bc">${home}${ds}</div>`;
+    },
+    desc: it => `一条面包屑导航：${tabsOf(it).map(t => t.label).join(" / ")}，当前页「${(tabsOf(it)[it.selected] || {}).label || ""}」${it.bcHome ? "，首位带小房子图标" : ""}`,
+  });
+
+  REG.add({
     kind: "stepper", name: "步骤条", cat: "navigation", icon: "linear_scale",
     inter: "tabs",
+    tabsMeta: null, /* 步骤条结构含连接线，不参与页签交互重建（HTML/Vue 均静态渲染） */
     sig: "doneIcon",
     spec: { w: 320, h: 56, selected: 1, doneIcon: "check", tabs: [{ icon: "", label: "第一步" }, { icon: "", label: "第二步" }, { icon: "", label: "第三步" }] },
     props: ["tabs", "selected"], tabsName: "步骤", tabsHideIcon: true,
@@ -906,6 +964,51 @@
       return `<div class="m3e-empty">${ic(it.icon, 56)}<span class="t">${esc(it.label)}</span><span class="s">${esc(it.supporting)}</span>${btn}</div>`;
     },
     desc: it => `一个空状态占位：${it.icon} 图标，标题「${it.label}」，副文「${it.supporting}」${it.cta ? `，行动按钮「${it.cta}」` : ""}`,
+  });
+
+  REG.add({
+    kind: "timeline", name: "时间线", cat: "content", icon: "timeline",
+    sig: "tlLine",
+    spec: {
+      w: T.CONTENT_W, h: 220, selected: 1, tlLine: "solid",
+      tabs: [{ icon: "", label: "下单成功" }, { icon: "", label: "支付完成" }, { icon: "", label: "商家发货" }, { icon: "", label: "确认收货" }],
+    },
+    props: ["tabs", "selected"], tabsName: "节点", tabsHideIcon: true, propLabels: { selected: "当前进行到" },
+    propDefs: [{ k: "tlLine", label: "连线样式", type: "sel", opts: [["solid", "实线"], ["dashed", "虚线"], ["none", "无连线"]] }],
+    render(it) {
+      const cur = it.selected == null ? 1 : it.selected;
+      const line = it.tlLine === "none" ? " noline" : it.tlLine === "dashed" ? " dashed" : "";
+      const rows = tabsOf(it).map((t, i) => {
+        const st = i < cur ? "done" : i === cur ? "cur" : "wait";
+        return `<div class="tli ${st}"><span class="rail"><i class="dot"></i><i class="ln2"></i></span><span class="tx">${esc(t.label)}</span></div>`;
+      }).join("");
+      return `<div class="m3e-tline${line}">${rows}</div>`;
+    },
+    desc: it => `一条时间线：${tabsOf(it).map(t => t.label).join(" → ")}，当前进行到「${(tabsOf(it)[it.selected == null ? 1 : it.selected] || {}).label || ""}」${it.tlLine === "dashed" ? "（虚线连接）" : it.tlLine === "none" ? "（无连线）" : ""}`,
+  });
+
+  REG.add({
+    kind: "quote", name: "引用块", cat: "content", icon: "format_quote",
+    sig: "cite",
+    spec: { w: T.CONTENT_W, h: 120, label: "设计不只是看起来如何，设计是它如何运作。", cite: "Steve Jobs" },
+    props: ["label"],
+    propDefs: [{ k: "cite", label: "来源署名", type: "txt" }],
+    render(it) {
+      return `<div class="m3e-quote"><span class="qmark">${svgTag("format_quote", 24, true)}</span><div class="qt">${esc(it.label)}</div>${it.cite ? `<span class="ct">—— ${esc(it.cite)}</span>` : ""}</div>`;
+    },
+    desc: it => `一个引用块：「${it.label}」${it.cite ? `，署名「${it.cite}」` : ""}`,
+  });
+
+  REG.add({
+    kind: "codeBlock", name: "代码块", cat: "content", icon: "integration_instructions",
+    sig: "lang",
+    spec: { w: T.CONTENT_W, h: 140, label: "npm install @m3e/designer", lang: "bash" },
+    props: ["label"],
+    propDefs: [{ k: "lang", label: "语言角标", type: "txt" }],
+    render(it) {
+      return `<div class="m3e-codeblk">${it.lang ? `<span class="lang">${esc(it.lang)}</span>` : ""}<pre>${esc(it.label)}</pre></div>`;
+    },
+    desc: it => `一个${it.lang ? it.lang + " " : ""}代码块，内容「${String(it.label).slice(0, 40)}${String(it.label).length > 40 ? "…" : ""}」`,
   });
 
   /* fill token → CSS 变量名 */

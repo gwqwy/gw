@@ -36,8 +36,10 @@ button{font-family:inherit;}
 .ibtn.s{width:24px;height:24px;}
 .tbtn.small{height:26px;padding:0 8px;font-size:12px;background:#E8DEF8;color:#1D192B;}
 .tbtn.small:hover{background:#D3BBE8;}
-#zoomPct{min-width:44px;text-align:center;font-size:12px;color:#49454F;}
+#zoomPct{min-width:44px;text-align:center;font-size:12px;color:#49454F;cursor:pointer;border-radius:6px;padding:2px 0;}
+#zoomPct:hover{background:#E8DEF8;color:#21005D;}
 #statPages,#statSel{font-size:12px;color:#79747E;margin-left:10px;white-space:nowrap;}
+.tbtn:disabled,.ibtn:disabled,.tbtn:disabled:hover,.ibtn:disabled:hover{opacity:.35;background:transparent;color:#79747E;cursor:default;}
 
 /* ============ 主体 ============ */
 #main{flex:1;display:flex;min-height:0;position:relative;}
@@ -91,6 +93,9 @@ button{font-family:inherit;}
 }
 .tile:hover .wx{display:block;}
 .tile.cw{background:#E8DEF8;border-color:#D0BCFF;color:#21005D;}
+
+/* 画布：空页面提示 */
+.frame-empty-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#79747E;font-size:14px;pointer-events:none;text-align:center;padding:20px;}
 
 /* ---------- uiverse.io/galaxy 社区组件面板 ---------- */
 .subchips{display:flex;flex-wrap:wrap;gap:4px;padding:2px 2px 8px;}

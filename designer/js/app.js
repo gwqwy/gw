@@ -264,10 +264,12 @@
     return JSON.stringify({ name: design.name, theme: design.theme, pages: design.pages, curPageId });
   }
   function pushHistory() {
+    if (softTimer) { clearTimeout(softTimer); softTimer = null; } /* 硬入栈后终止文本合并窗口，防止下一次编辑丢历史 */
     undoStack.push(snapshot());
     if (undoStack.length > 60) undoStack.shift();
     redoStack.length = 0;
     markDirty();
+    updateEditButtons();
   }
   function restore(json) {
     const d = normalizeDesign(JSON.parse(json));
@@ -277,8 +279,14 @@
     renderAll();
     autosave();
   }
-  function undo() { if (!undoStack.length) return toast("没有可撤销的操作"); redoStack.push(snapshot()); restore(undoStack.pop()); markDirty(); }
-  function redo() { if (!redoStack.length) return toast("没有可重做的操作"); undoStack.push(snapshot()); restore(redoStack.pop()); markDirty(); }
+  function undo() { if (!undoStack.length) return toast("没有可撤销的操作"); redoStack.push(snapshot()); restore(undoStack.pop()); markDirty(); updateEditButtons(); }
+  function redo() { if (!redoStack.length) return toast("没有可重做的操作"); undoStack.push(snapshot()); restore(redoStack.pop()); markDirty(); updateEditButtons(); }
+  /** 撤销/重做按钮的可用状态（无步可退/进时置灰） */
+  function updateEditButtons() {
+    const u = $("#btnUndo"), r = $("#btnRedo");
+    if (u) u.disabled = !undoStack.length;
+    if (r) r.disabled = !redoStack.length;
+  }
 
   function markDirty() {
     dirty = true;
@@ -408,7 +416,7 @@
     const sv = pop.querySelector(".cp-sv"), hue = pop.querySelector(".cp-hue");
     const svCur = pop.querySelector(".cp-sv .cur"), hueCur = pop.querySelector(".cp-hue .cur");
     const prev = pop.querySelector(".cp-prev"), hexI = pop.querySelector(".cp-hex");
-    let pushed = false;
+    let pushed = false, lastHex = initial;
     function apply() {
       const hex = hsvToHex(h, s, v);
       sv.querySelector(".hue").style.background = `hsl(${h},100%,50%)`;
@@ -417,8 +425,10 @@
       hueCur.style.left = (h / 360 * 100) + "%";
       prev.style.background = hex;
       hexI.value = hex;
-      page.bg = hex;
+      if (hex === lastHex) return hex; /* 打开取色器本身不算一次编辑 */
       if (!pushed) { pushHistory(); pushed = true; }
+      page.bg = hex;
+      lastHex = hex;
       renderCanvas();
       return hex;
     }
@@ -521,6 +531,12 @@
 
     const groups = page.groups || [];
     const popupDone = new Set();
+    if (!page.items.length) {
+      const hint = document.createElement("div");
+      hint.className = "frame-empty-hint";
+      hint.textContent = "从左侧拖入组件，或双击组件图块放到画布中央";
+      body.appendChild(hint);
+    }
     for (const it of page.items) {
       /* 弹窗图层：在其首个成员之前画遮罩 */
       if (it.gid && !popupDone.has(it.gid)) {
@@ -744,6 +760,11 @@
       m.it.y = Math.max(0, Math.min(Math.max(0, ph - m.it.h), m.y + dy));
       redrawItem(m.it);
     }
+    /* 拖动时在状态栏实时回显位置尺寸 */
+    const m0 = moveState.items[0];
+    $("#statSel").textContent = moveState.items.length === 1
+      ? `X ${Math.round(m0.it.x)} · Y ${Math.round(m0.it.y)} · ${m0.it.w}×${m0.it.h}`
+      : `已选 ${moveState.items.length} 个组件`;
     drawGuides(guides, page);
     renderSelectionLight();
   }
@@ -803,6 +824,7 @@
     const box = $("#selbox .selbox");
     if (!box || sel.size !== 1) { renderSelection(); return; }
     const it = curItems().find(i => i.id === [...sel][0]);
+    if (!it) { renderSelection(); return; } /* 选中项可能已被切换页面等操作清掉 */
     const o = w2s(it.x, it.y);
     box.style.left = o.x + "px";
     box.style.top = o.y + "px";
@@ -836,6 +858,7 @@
     if (!ev.detail.ctrlKey) { wd = Math.round(wd / 4) * 4; ht = Math.round(ht / 4) * 4; x = Math.round(x / 4) * 4; y = Math.round(y / 4) * 4; }
     it.w = Math.max(12, wd); it.h = Math.max(12, ht); it.x = x; it.y = y;
     redrawItem(it);
+    $("#statSel").textContent = `X ${Math.round(it.x)} · Y ${Math.round(it.y)} · ${Math.round(it.w)}×${Math.round(it.h)}`;
     renderSelectionLight();
   }
   function onRsUp() { rsState = null; renderSelection(); autosave(); }
@@ -845,7 +868,8 @@
   function startMarquee(e) {
     if (e.button !== 0) return;
       const w0 = worldFromEvent(e);
-      mqState = { x0: w0.x, y0: w0.y };
+      /* Shift 从当前选区追加框选；普通框选为替换 */
+      mqState = { x0: w0.x, y0: w0.y, prior: e.shiftKey ? [...sel] : null };
     const mq = $("#marquee");
     mq.style.display = "block";
     capture(e);
@@ -863,13 +887,15 @@
       mq.style.display = "none";
       if (mqState && mqState.box && (mqState.box.w > 4 || mqState.box.h > 4)) {
         const page = curPage();
+        const b = mqState.box;
+        const matched = page.items
+          .filter(it => it.x < b.x + b.w && it.x + it.w > b.x && it.y < b.y + b.h && it.y + it.h > b.y)
+          .map(it => it.id);
         sel.clear();
-        for (const it of page.items) {
-          const b = mqState.box;
-          if (it.x < b.x + b.w && it.x + it.w > b.x && it.y < b.y + b.h && it.y + it.h > b.y) sel.add(it.id);
-        }
+        if (mqState.prior) mqState.prior.forEach(id => sel.add(id));
+        matched.forEach(id => sel.add(id));
         expandGroupsSel();
-      } else { sel.clear(); }
+      } else if (!mqState.prior) { sel.clear(); }
       mqState = null;
       renderSelection();
       autosave();
@@ -938,13 +964,22 @@
       }
       document.body.appendChild(ghost);
       moveGhost(e);
-      let movedPx = 0;
+      let movedPx = 0, cancelled = false;
       capture(e);
       const onMv = ev => { movedPx += Math.abs(ev.detail.movementX || 1) + Math.abs(ev.detail.movementY || 0); moveGhost(ev.detail); };
+      /* 拖拽途中按 Esc 取消放置 */
+      const onKey = ev => {
+        if (ev.key !== "Escape") return;
+        cancelled = true;
+        if (ghost) { ghost.remove(); ghost = null; }
+      };
+      document.addEventListener("keydown", onKey);
       document.addEventListener("gd-move", onMv);
       document.addEventListener("gd-up", ev => {
         document.removeEventListener("gd-move", onMv);
-        ghost.remove(); ghost = null;
+        document.removeEventListener("keydown", onKey);
+        if (ghost) { ghost.remove(); ghost = null; }
+        if (cancelled) { ghostWidget = null; ghostGx = null; return; }
         const d = ev.detail;
         const bodyEl = document.elementFromPoint(d.clientX, d.clientY);
         const fb = bodyEl && bodyEl.closest(".frame-body");
@@ -1043,10 +1078,21 @@
     const t = document.createElement("div");
     t.className = "tile gxt";
     t.dataset.kind = "gx:" + comp.id;
-    t.title = `${comp.n} — ${comp.a || "community"}（拖入画布）`;
+    t.title = `${comp.n} — ${comp.a || "community"}（拖入画布或双击放置）`;
     t.innerHTML = `<span class="gxv" data-gx="${comp.id}"></span>` +
       `<span class="tl">${REG.esc(comp.n)}</span><span class="ga">${REG.esc(comp.a || "")}</span>`;
     gxPreviewObserver().observe(t.querySelector(".gxv"));
+    t.addEventListener("dblclick", () => {
+      const c = GX().get(comp.id);
+      if (!c) return;
+      const pv = t.querySelector(".gxv");
+      const w = +pv?.dataset.w || 200, h = +pv?.dataset.h || 80;
+      const page = curPage();
+      const size = T.pageSize(page);
+      const x = Math.round(Math.max(0, (size.w - w) / 2) / 4) * 4;
+      const y = Math.round(Math.max(0, (size.h - h) / 2) / 4) * 4;
+      placeGx(c, page, x, y, w, h);
+    });
     return t;
   }
   /** 分块渲染大列表（3800+ 组件不能一次性建 DOM） */
@@ -1141,7 +1187,18 @@
     tile.dataset.kind = kind;
     tile.title = title || name;
     tile.innerHTML = `<span class="ic">${svg(icon, 22)}</span><span class="tl">${REG.esc(name)}</span>`;
+    /* 双击 = 放到画布中央（自定义组件图块的双击留给孩子节点做重命名，不在此绑定） */
+    if (!kind.startsWith("widget:")) tile.addEventListener("dblclick", () => placeAtCenter(kind));
     return tile;
+  }
+  /** 把组件（或组件默认尺寸）放到当前页面中央，4dp 对齐 */
+  function placeAtCenter(kind, spec) {
+    const page = curPage();
+    const size = T.pageSize(page);
+    const sp = spec || (REG.def(kind) && REG.def(kind).spec) || { w: 160, h: 56 };
+    const x = Math.round(Math.max(0, (size.w - sp.w) / 2) / 4) * 4;
+    const y = Math.round(Math.max(0, (size.h - sp.h) / 2) / 4) * 4;
+    addComponent(kind, page, x, y);
   }
   /** 自定义组件图块：items=图标块；code=实时预览块（双击重命名，悬停 × 删除） */
   function widgetTileEl(w) {
@@ -1827,11 +1884,11 @@
   }
   function reorder(dir) { // dir: top up down bottom
     if (sel.size !== 1) return toast("请先选中一个组件");
-    pushHistory();
     const items = curItems();
     const i = items.findIndex(x => x.id === [...sel][0]);
     const j = dir === "top" ? items.length - 1 : dir === "bottom" ? 0 : i + (dir === "up" ? 1 : -1);
-    if (j < 0 || j >= items.length) return;
+    if (j < 0 || j >= items.length || j === i) return; /* 已在顶/底或无处可移：不入历史 */
+    pushHistory();
     const [it] = items.splice(i, 1);
     items.splice(j, 0, it);
     renderCanvas(); autosave();
@@ -1936,7 +1993,6 @@
       } else if (k === "size") h += field(pl("size", "字号"), num("size", it.size || 28));
       else if (k === "rows") h += field(pl("rows", "行数"), num("rows", it.rows == null ? 3 : it.rows));
       else if (k === "bold") h += field("加粗", chk("bold", !!it.bold));
-      else if (k === "radius") h += field("圆角", num("radius", it.radius == null ? 28 : it.radius));
       else if (k === "html") h += field("HTML / 模板", `<textarea data-k="html" rows="6" spellcheck="false">${REG.esc(it.html || "")}</textarea>`, true);
       else if (k === "css") h += field("组件 CSS", `<textarea data-k="css" rows="5" spellcheck="false" placeholder="组件独立样式（已作用域隔离）">${REG.esc(it.css || "")}</textarea>`, true);
       else if (k === "vueScript") h += field("Vue 脚本", `<textarea data-k="vueScript" rows="5" spellcheck="false" placeholder="仅 Vue 导出时生效">${REG.esc(it.vueScript || "")}</textarea>`, true);
@@ -2235,10 +2291,14 @@
     }
     pushHistory();
     const page = curPage();
+    const size = T.pageSize(page);
     const paste = item => {
       const c = JSON.parse(JSON.stringify(item));
       c.id = T.uid();
       c.x += 16; c.y += 16;
+      /* 钳制在页面内，防止粘贴/副本落在画布外不可见 */
+      c.x = Math.max(0, Math.min(size.w - c.w, c.x));
+      c.y = Math.max(0, Math.min(size.h - c.h, c.y));
       page.items.push(c);
       sel.add(c.id);
       return c;
@@ -2270,10 +2330,13 @@
     if (!sel.size) return;
     pushHistory();
     const page = curPage();
+    const size = T.pageSize(page);
     const arr = selItems();
     const clones = arr.map(it => {
       const c = JSON.parse(JSON.stringify(it));
       c.id = T.uid(); c.x += 16; c.y += 16;
+      c.x = Math.max(0, Math.min(size.w - c.w, c.x));
+      c.y = Math.max(0, Math.min(size.h - c.h, c.y));
       return c;
     });
     remapGids(clones, page);
@@ -2511,6 +2574,14 @@
     $("#btnZoomOut").addEventListener("click", () => { zoom = Math.max(0.1, zoom - 0.1); applyTransform(); });
     $("#btnZoomIn").addEventListener("click", () => { zoom = Math.min(3, zoom + 0.1); applyTransform(); });
     $("#btnFit").addEventListener("click", fitView);
+    /* 点击缩放百分比 = 恢复 100%（保持当前视口中心不动） */
+    $("#zoomPct").addEventListener("click", () => {
+      const vp = $("#viewport").getBoundingClientRect();
+      const cx = vp.width / 2, cy = vp.height / 2;
+      const wx = (cx - panX) / zoom, wy = (cy - panY) / zoom;
+      zoom = 1; panX = cx - wx; panY = cy - wy;
+      applyTransform();
+    });
     $("#btnTheme").addEventListener("click", e => {
       e.stopPropagation();
       $("#exportpanel").classList.remove("open");
@@ -2656,6 +2727,7 @@
     initKeys();
     renderAll();
     fitView();
+    updateEditButtons();
     Bridge.setTitle(design.name + " — gw Designer");
   }
 

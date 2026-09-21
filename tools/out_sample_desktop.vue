@@ -4,14 +4,14 @@
 -->
 <template>
   <div class="m3e-page page-root" :style="pageStyle">
-    <div class="m3e-item" style="left:16px;top:16px;width:160px;height:48px;border-radius:16px;overflow:hidden;"><div @click="u3si3lc8x=!u3si3lc8x" :class="{on:u3si3lc8x}" class="m3e-sw"><span class="lb">通知</span><span class="track"><span class="knob"><span class="m3e-ic"><svg viewBox="0 -960 960 960" width="14" height="14" aria-hidden="true"><path d="m378-332 363-363q9-9 21.5-9t21.5 9q9 9 9 21.5t-9 21.5L399-267q-9 9-21 9t-21-9L175-449q-9-9-8.5-21.5T176-492q9-9 21.5-9t21.5 9l159 160Z"/></svg></span></span></span></div></div>
+    <div class="m3e-item" style="left:16px;top:16px;width:160px;height:48px;border-radius:16px;overflow:hidden;"><div @click="u0wfjni7n=!u0wfjni7n" :class="{on:u0wfjni7n}" class="m3e-sw"><span class="lb">通知</span><span class="track"><span class="knob"><span class="m3e-ic"><svg viewBox="0 -960 960 960" width="14" height="14" aria-hidden="true"><path d="m378-332 363-363q9-9 21.5-9t21.5 9q9 9 9 21.5t-9 21.5L399-267q-9 9-21 9t-21-9L175-449q-9-9-8.5-21.5T176-492q9-9 21.5-9t21.5 9l159 160Z"/></svg></span></span></span></div></div>
     
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-const u3si3lc8x = ref(false);
+const u0wfjni7n = ref(false);
 
 const pageStyle = {
   width: '1280px',
@@ -565,6 +565,58 @@ onMounted(function () {
 .uv-cardblog .description{font-size:11px;color:#64748B;line-height:1.5;margin:4px 0 0;}
 .uv-cardblog .action{font-size:12px;font-weight:600;color:#3B82F6;text-decoration:none;}
 @keyframes uv-cpbounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}
+
+/* ===== 分段按钮 ===== */
+.m3e-seg{width:100%;height:100%;display:flex;align-items:stretch;background:var(--sec-c);border-radius:999px;overflow:hidden;}
+.m3e-seg.outline{background:transparent;border:1px solid var(--out);}
+.m3e-seg .sg{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;color:var(--on-sur-var);cursor:pointer;white-space:nowrap;overflow:hidden;min-width:0;}
+.m3e-seg .sg svg{width:18px;height:18px;}
+.m3e-seg .sg.sel{background:var(--sur);color:var(--on-sur);font-weight:600;}
+.m3e-seg:not(.outline) .sg.sel{background:var(--sur-chh);}
+.m3e-seg.outline .sg.sel{background:var(--sec-c);color:var(--on-sec-c);}
+.m3e-seg .sg + .sg{border-left:1px solid var(--out-var);}
+.m3e-seg.outline .sg.sel + .sg,.m3e-seg.outline .sg + .sg.sel{border-left-color:transparent;}
+
+/* ===== 多行输入框 ===== */
+.m3e-ta{width:100%;height:100%;display:flex;flex-direction:column;background:var(--sur-chh);border-radius:16px;padding:12px 16px;overflow:hidden;}
+.m3e-ta.v-outlined{background:transparent;border:1px solid var(--out);}
+.m3e-ta .cap{font-size:12px;color:var(--pri);line-height:1.2;flex:none;}
+.m3e-ta .val{flex:1;font-size:14px;color:var(--on-sur);line-height:1.5;margin-top:6px;white-space:pre-wrap;word-break:break-word;overflow:hidden;}
+
+/* ===== 时间线 ===== */
+.m3e-tline{width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;}
+.m3e-tline .tli{flex:1;min-height:0;display:flex;align-items:center;gap:12px;}
+.m3e-tline .rail{width:16px;align-self:stretch;flex:none;display:flex;flex-direction:column;align-items:center;}
+.m3e-tline .rail .dot{width:12px;height:12px;border-radius:50%;background:var(--out-var);flex:none;margin-top:2px;}
+.m3e-tline .tli.done .rail .dot{background:var(--pri);}
+.m3e-tline .tli.cur .rail .dot{background:var(--pri);box-shadow:0 0 0 4px var(--pri-c);}
+.m3e-tline .rail .ln2{flex:1;width:2px;background:var(--out-var);}
+.m3e-tline.dashed .rail .ln2{background:none;border-left:2px dashed var(--out-var);}
+.m3e-tline.noline .rail .ln2{display:none;}
+.m3e-tline .tli:last-child .rail .ln2{display:none;}
+.m3e-tline .tx{font-size:14px;color:var(--on-sur-var);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.m3e-tline .tli.done .tx,.m3e-tline .tli.cur .tx{color:var(--on-sur);}
+.m3e-tline .tli.cur .tx{font-weight:600;}
+
+/* ===== 面包屑 ===== */
+.m3e-bc{width:100%;height:100%;display:flex;align-items:center;font-size:14px;color:var(--on-sur-var);overflow:hidden;}
+.m3e-bc .bh{display:inline-flex;margin-right:8px;color:var(--on-sur-var);}
+.m3e-bc .bh svg{width:16px;height:16px;}
+.m3e-bc .bc{display:inline-flex;align-items:center;cursor:pointer;white-space:nowrap;min-width:0;}
+.m3e-bc .bc + .bc::before{content:"/";margin:0 7px;color:var(--out);}
+.m3e-bc .bc.sel{color:var(--on-sur);font-weight:600;}
+
+/* ===== 引用块 ===== */
+.m3e-quote{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;background:var(--sur-cl);border-radius:16px;padding:16px 20px;overflow:hidden;}
+.m3e-quote .qmark{color:var(--pri);flex:none;margin-bottom:4px;}
+.m3e-quote .qmark svg{width:24px;height:24px;}
+.m3e-quote .qt{font-size:15px;color:var(--on-sur);line-height:1.6;}
+.m3e-quote .ct{font-size:12px;color:var(--on-sur-var);margin-top:8px;flex:none;}
+
+/* ===== 代码块 ===== */
+.m3e-codeblk{width:100%;height:100%;position:relative;background:#1D1B20;color:#E6E0E9;border-radius:16px;padding:14px 16px;font-family:Consolas,"Cascadia Mono","Courier New",monospace;font-size:12.5px;line-height:1.55;overflow:hidden;}
+.m3e-codeblk .lang{position:absolute;top:8px;right:12px;font-size:10px;letter-spacing:.5px;color:rgba(255,255,255,.45);font-family:Roboto,system-ui,sans-serif;}
+.m3e-codeblk pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;}
 
 /* ===== 签名属性（每个组件的专属差异化样式） ===== */
 .m3e-extfab-spin{display:inline-flex;}

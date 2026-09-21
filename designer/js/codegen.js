@@ -138,6 +138,12 @@
     if (def.inter === "toggle") inner = inner.replace(/^<(\w+)/, '<$1 data-act="toggle"');
     else if (def.inter === "radio") inner = inner.replace(/^<(\w+)/, '<$1 data-act="radio"');
     else if (def.inter === "slider") inner = inner.replace(/^<div/, '<div data-act="slider"');
+    else if (def.inter === "tabs" && def.tabsMeta) {
+      /* 页签类组件：根元素标 data-act，子项标 data-tab，interScript 据此接线 */
+      inner = inner.replace(/^<(\w+)/, '<$1 data-act="tabs"');
+      const tm = def.tabsMeta(it, reg);
+      if (tm.child) inner = inner.replace(new RegExp(`class="(${tm.child}(?: [^"]*)?)"`, "g"), 'data-tab class="$1"');
+    }
     return { shell, act, inner };
   }
 
@@ -204,6 +210,24 @@ ${interScript()}
   }
 
   /* ---------- Vue SFC（单页） ---------- */
+  /** 页签类组件的 Vue 交互标记（tabsMeta 数据驱动）；返回 null 表示保持静态渲染。
+   *  供 vueSFC（整页）与 itemSnippet（单组件）共用。 */
+  function tabsVue(it, def, id, setupArr) {
+    if (def.inter !== "tabs" || def.tabsMeta === null) return null;
+    const tabs = it.tabs || [];
+    setupArr.push(`const sel_${id} = ref(${it.selected || 0});`);
+    const tm = def.tabsMeta
+      ? def.tabsMeta(it, R())
+      : { wrap: `m3e-tabs${it.indStyle === "underline" ? " underline" : ""}`, child: "tab" };
+      const itemTpl = tabs.map((t, i) => {
+        const ind = tm.ind ? `<div class="ind">${R().ic(t.icon, 24, i === it.selected)}</div>` : (t.icon ? R().ic(t.icon, 18) : "");
+        const label = tm.label === "" ? "" : `<span${tm.label ? ` class="${tm.label}"` : ""}>${esc(t.label)}</span>`;
+        /* 子项必须是带 class 的 div：此前输出 <dest> 等非标标签，.dest 样式挂不上 */
+        return `<div class="${tm.child}" :class="{sel: sel_${id}===${i}}" @click="sel_${id}=${i}">${ind}${label}</div>`;
+      }).join("");
+    return `<div class="${tm.wrap}">${tm.pre || ""}${itemTpl}</div>`;
+  }
+
   function vueSFC(page, design) {
     const reg = R();
     const theme = design.theme;
@@ -227,25 +251,10 @@ ${interScript()}
         inner = def.render(it).replace(/^<(\w+)/, `<$1 @click="${id}=true" :class="{on:${id}}"`)
           .replace(/ class="([^"]*?) ?on"/, ' class="$1"');
       } else if (def.inter === "tabs") {
-        const tabs = it.tabs || [];
-        setup.push(`const sel_${id} = ref(${it.selected || 0});`);
-        const childCls = it.kind === "fabMenu" ? "mi" : ((it.kind === "bottomNav" || it.kind === "navRail") ? "dest" : "tab");
-        const itemTpl = tabs.map((t, i) => {
-          const selCls = i === it.selected ? " sel" : "";
-          const ind = (it.kind === "bottomNav" || it.kind === "navRail")
-            ? `<div class="ind${selCls}">${R().ic(t.icon, 24, i === it.selected)}</div>`
-            : (t.icon ? R().ic(t.icon, 18) : "");
-          const label = (it.kind === "bottomNav" || it.kind === "navRail") ? `<span class="dl">${esc(t.label)}</span>` : `<span>${esc(t.label)}</span>`;
-          return `<${childCls} :class="{sel: sel_${id}===${i}}" @click="sel_${id}=${i}">${ind}${label}</${childCls}>`;
-        }).join("");
-        if (it.kind === "bottomNav" || it.kind === "navRail") {
-          const hd = it.kind === "navRail" ? `<div class="hd">${R().ic("menu", 24)}</div>` : "";
-          inner = `<div class="m3e-${it.kind === "navRail" ? "rail" : "bnav"}">${hd}${itemTpl}</div>`;
-        } else if (it.kind === "fabMenu") {
-          inner = `<div class="m3e-fabmenu v-${it.variant || "tonal"}">${itemTpl}</div>`;
-        } else {
-          inner = `<div class="m3e-tabs">${itemTpl}</div>`;
-        }
+        /* 页签类组件：结构由各组件的 tabsMeta 钩子描述（wrap/child/ind/label/pre），
+         * 生成可交互的 Vue 绑定；tabsMeta === null（如步骤条）保持静态渲染 */
+        const t2 = tabsVue(it, def, id, setup);
+        inner = t2 == null ? def.render(it) : t2;
       } else if (def.inter === "slider") {
         inner = def.render(it).replace(/^<div/, `<div data-act="slider" data-sid="${id}"`);
         mounted.push(`bindSlider(document.querySelector('[data-sid="${id}"]'));`);
@@ -265,7 +274,9 @@ ${interScript()}
     }
     for (const g of popupGroups) {
       setup.push(`const pop_${safeId(g.id)} = ref(false)`);
-      const members = page.items.map(renderV).filter((_, i) => inPopup(page.items[i])).join("\n      ");
+      /* 只渲染属于本弹窗的成员；此前误用 map 全量渲染，
+       * 会把非弹窗组件的 ref 声明重复写入（SFC 编译报错）并串组 */
+      const members = page.items.filter(it => it.gid === g.id).map(renderV).join("\n      ");
       items += `<div class="m3e-popup" :class="{open: pop_${safeId(g.id)}}" @click.self="pop_${safeId(g.id)}=false">\n      ${members}\n    </div>\n    `;
     }
     if (popupGroups.length) {
@@ -475,8 +486,9 @@ body{margin:0;background:#ECE6F0;display:flex;justify-content:center;align-items
       const id = safeId(it.id);
       const setup = [];
       let inner = def.render(it);
-      if (def.inter === "toggle") { setup.push(`const ${id} = ref(${!!it.checked})`); inner = def.render(it).replace(/^<(\w+)/, `<$1 @click="${id}=!${id}" :class="{on:${id}}"`).replace(/ class="([^"]*?)on"/, ' class="$1"'); }
-      else if (def.inter === "radio") { setup.push(`const ${id} = ref(${!!it.checked})`); inner = def.render(it).replace(/^<(\w+)/, `<$1 @click="${id}=true" :class="{on:${id}}"`).replace(/ class="([^"]*?)on"/, ' class="$1"'); }
+      if (def.inter === "toggle") { setup.push(`const ${id} = ref(${!!it.checked})`); inner = def.render(it).replace(/^<(\w+)/, `<$1 @click="${id}=!${id}" :class="{on:${id}}"`).replace(/ class="([^"]*?) ?on"/, ' class="$1"'); }
+      else if (def.inter === "radio") { setup.push(`const ${id} = ref(${!!it.checked})`); inner = def.render(it).replace(/^<(\w+)/, `<$1 @click="${id}=true" :class="{on:${id}}"`).replace(/ class="([^"]*?) ?on"/, ' class="$1"'); }
+      else if (def.inter === "tabs") { const t2 = tabsVue(it, def, id, setup); if (t2 != null) inner = t2; }
       else if (def.inter === "slider") { setup.push(`const ${id} = ref(${it.value == null ? 50 : it.value})`); }
       return `<!-- 组件：${def.name}（来自 gw Designer） -->
 <template>
