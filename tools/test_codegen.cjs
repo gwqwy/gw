@@ -4,7 +4,27 @@ const path = require("path");
 const vm = require("vm");
 
 const D = path.join(__dirname, "..", "designer", "js");
-const sandbox = { console, window: {}, JSON, Math, Date, setTimeout, clearTimeout, RegExp, Object, Array };
+
+/* 确定性随机源（缺陷修复）
+   designer/js/tokens.js 的 uid() 基于 Math.random()，而本脚本会把生成结果写回
+   tools/out_sample.* —— 这三个文件已被 git 跟踪，于是每次自测都会产生“只有随机 id
+   不同”的噪声 diff，工作区永远不干净。这里给沙箱注入定种 PRNG，使同一份源码永远
+   生成字节一致的样本（可复现、可 diff）。
+   注意：只在测试沙箱内替换，不改动产品代码——编辑器运行时仍需真正的随机 id。 */
+function seededMath(seed) {
+  let s = seed >>> 0;
+  return Object.assign(Object.create(Math), {
+    random() {
+      // xorshift32：s 恒为非 0
+      s ^= s << 13; s >>>= 0;
+      s ^= s >>> 17;
+      s ^= s << 5; s >>>= 0;
+      return s / 4294967296;
+    },
+  });
+}
+
+const sandbox = { console, window: {}, JSON, Math: seededMath(20260926), Date, setTimeout, clearTimeout, RegExp, Object, Array };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 for (const f of ["tokens.js", "icons.js", "m3estyle.js", "registry.js", "uiverse.js", "codegen.js"]) {
@@ -95,6 +115,13 @@ const cbTri = Object.assign(REG.create("checkbox", 0, 0, design.theme), { tri: t
 ok(REG.defs.checkbox.render(cbTri).includes('class="m3e-cb on"'), "复选框半选态有横杠标记");
 const bdDot = Object.assign(REG.create("badge", 0, 0, design.theme), { dotOnly: true });
 ok(!REG.defs.badge.render(bdDot).includes(">3<"), "徽标红点模式不显示数字");
+
+/* 生成可复现性：同一设计两次生成必须字节一致。
+   回归目标——历史缺陷中 uid() 走 Math.random，导致 out_sample.* 每次自测都被重写、
+   工作区产生纯噪声 diff。此断言保证生成链路上不再泄漏随机/时间源。 */
+console.log("== 生成可复现性 ==");
+ok(GEN.htmlDoc(design) === GEN.htmlDoc(design), "HTML 导出两次生成字节一致（无随机/时间源泄漏）");
+ok(GEN.vueSFC(p, design) === GEN.vueSFC(p, design), "Vue 导出两次生成字节一致");
 
 /* HTML 导出 */
 console.log("== HTML 导出 ==");

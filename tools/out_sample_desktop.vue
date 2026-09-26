@@ -4,14 +4,14 @@
 -->
 <template>
   <div class="m3e-page page-root" :style="pageStyle">
-    <div class="m3e-item" style="left:16px;top:16px;width:160px;height:48px;border-radius:16px;overflow:hidden;"><div @click="u0wfjni7n=!u0wfjni7n" :class="{on:u0wfjni7n}" class="m3e-sw"><span class="lb">通知</span><span class="track"><span class="knob"><span class="m3e-ic"><svg viewBox="0 -960 960 960" width="14" height="14" aria-hidden="true"><path d="m378-332 363-363q9-9 21.5-9t21.5 9q9 9 9 21.5t-9 21.5L399-267q-9 9-21 9t-21-9L175-449q-9-9-8.5-21.5T176-492q9-9 21.5-9t21.5 9l159 160Z"/></svg></span></span></span></div></div>
+    <div class="m3e-item" style="left:16px;top:16px;width:160px;height:48px;border-radius:16px;overflow:hidden;"><div @click="uxnza1xcz=!uxnza1xcz" :class="{on:uxnza1xcz}" class="m3e-sw"><span class="lb">通知</span><span class="track"><span class="knob"><span class="m3e-ic"><svg viewBox="0 -960 960 960" width="14" height="14" aria-hidden="true"><path d="m378-332 363-363q9-9 21.5-9t21.5 9q9 9 9 21.5t-9 21.5L399-267q-9 9-21 9t-21-9L175-449q-9-9-8.5-21.5T176-492q9-9 21.5-9t21.5 9l159 160Z"/></svg></span></span></span></div></div>
     
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-const u0wfjni7n = ref(false);
+const uxnza1xcz = ref(false);
 
 const pageStyle = {
   width: '1280px',
