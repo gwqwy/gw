@@ -405,7 +405,14 @@ body{margin:0;background:#ECE6F0;display:flex;justify-content:center;align-items
       vue: "请实现为一个 **Vue 3（<script setup>）单文件组件** 的网页应用（可用 Vite 搭建，每个屏幕一个 .vue 页面组件）。",
       html: "请实现为一个**纯 HTML + CSS（可加少量原生 JS）的静态网页**，不依赖任何框架与构建工具。",
       web: "请实现为一个 Web 网页界面，技术栈不限（推荐 Vue 3 或 React），要求界面与下方描述一致。",
+      compose: "请实现为一个 **Android Jetpack Compose (Kotlin)** 应用界面，使用 Material 3（androidx.compose.material3），每个屏幕一个 @Composable。",
+      flutter: "请实现为一个 **Flutter (Dart)** 应用界面，Material 3（useMaterial3: true），每个屏幕一个页面 Widget。",
     }[opts.target || "vue"];
+    const navNote = {
+      vue: "（Vue 用 router 或组件切换）",
+      compose: "（Compose 用 Navigation-Compose 在屏幕间导航）",
+      flutter: "（Flutter 用 Navigator 路由）",
+    }[opts.target] || "（按所选技术实现屏幕间导航）";
 
     const L = [];
     L.push(`请根据以下设计描述，实现一个 **Material 3 Expressive 风格** 的界面。`);
@@ -467,7 +474,7 @@ body{margin:0;background:#ECE6F0;display:flex;justify-content:center;align-items
     L.push(`## 实现要求`);
     L.push(`- 严格按上述颜色令牌设置配色（CSS 变量或主题对象），控件圆角、高度与描述一致。`);
     L.push(`- 布局使用 Flex，按照每个组件的位置描述还原（贴边/居中/间距），保持 16dp 页面边距。`);
-    L.push(`- 开关、复选框、页签、滑块等控件可交互；按钮跳转按描述实现（Vue 用 router 或组件切换）。`);
+    L.push(`- 开关、复选框、页签、滑块等控件可交互；按钮跳转按描述实现${navNote}。`);
     L.push(`- 代码结构清晰、组件化命名，可直接运行。`);
     return L.join("\n");
   }

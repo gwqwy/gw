@@ -515,6 +515,48 @@
 .m3e-codeblk .lang{position:absolute;top:8px;right:12px;font-size:10px;letter-spacing:.5px;color:rgba(255,255,255,.45);font-family:Roboto,system-ui,sans-serif;}
 .m3e-codeblk pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;}
 
+/* ===== 骨架屏 ===== */
+.m3e-skel{width:100%;height:100%;display:flex;flex-direction:column;gap:14px;padding:4px 2px;overflow:hidden;}
+.m3e-skel .sk-row{flex:1;display:flex;align-items:center;gap:12px;min-height:0;}
+.m3e-skel .sk-av{width:40px;height:40px;border-radius:50%;flex:none;}
+.m3e-skel .sk-lines{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;}
+.m3e-skel .sk-l{height:12px;border-radius:6px;}
+.m3e-skel .sk-av,.m3e-skel .sk-l{background:linear-gradient(90deg,var(--sur-chh) 25%,var(--sur-cl) 45%,var(--sur-chh) 65%);background-size:220% 100%;animation:m3e-shimmer 1.4s linear infinite;}
+@keyframes m3e-shimmer{0%{background-position:110% 0;}100%{background-position:-110% 0;}}
+
+/* ===== 图表占位（折线 / 柱状 / 环形） ===== */
+.m3e-chart{width:100%;height:100%;background:var(--sur-cl);border-radius:16px;padding:12px;overflow:hidden;}
+.m3e-chart svg{width:100%;height:100%;display:block;}
+.m3e-donut{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;}
+.m3e-donut svg{width:78%;height:78%;}
+.m3e-donut .dl2{position:absolute;font-size:16px;font-weight:600;color:var(--on-sur);}
+
+/* ===== 聊天气泡 ===== */
+.m3e-chatb{width:100%;height:100%;display:flex;align-items:flex-start;gap:8px;padding:2px 4px;overflow:hidden;}
+.m3e-chatb.me{flex-direction:row-reverse;}
+.m3e-chatb .bub{max-width:78%;background:var(--sur-ch);color:var(--on-sur);font-size:14px;line-height:1.5;padding:10px 14px;border-radius:4px 16px 16px 16px;}
+.m3e-chatb.me .bub{background:var(--pri);color:var(--on-pri);border-radius:16px 4px 16px 16px;}
+.m3e-chatb .tm{font-size:10px;color:var(--on-sur-var);align-self:flex-end;flex:none;}
+
+/* ===== 搜索输入框 ===== */
+.m3e-sfield{width:100%;height:100%;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:999px;font-size:14px;color:var(--on-sur);overflow:hidden;}
+.m3e-sfield.v-outlined{border:1px solid var(--out);}
+.m3e-sfield.v-filled{background:var(--sur-chh);}
+.m3e-sfield svg{width:20px;height:20px;flex:none;color:var(--on-sur-var);}
+.m3e-sfield .val{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.m3e-sfield .val.ph{opacity:.45;}
+
+/* ===== 数字步进器 ===== */
+.m3e-stepin{width:100%;height:100%;display:flex;align-items:center;gap:8px;background:var(--sur-chh);border-radius:24px;padding:0 8px 0 16px;overflow:hidden;}
+.m3e-stepin .cap{flex:1;font-size:13px;color:var(--on-sur);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.m3e-stepin .sib{width:32px;height:32px;border-radius:50%;border:none;background:var(--sur);color:var(--pri);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;}
+.m3e-stepin .siv{min-width:26px;text-align:center;font-size:15px;font-weight:600;color:var(--on-sur);}
+
+/* ===== 验证码输入 ===== */
+.m3e-otp{width:100%;height:100%;display:flex;align-items:center;justify-content:center;gap:8px;}
+.m3e-otp .cell{flex:1;max-width:44px;height:46px;border-radius:10px;border:1px solid var(--out);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--on-sur);background:var(--sur);}
+.m3e-otp .cell.cur{border:2px solid var(--pri);}
+
 /* ===== 签名属性（每个组件的专属差异化样式） ===== */
 .m3e-extfab-spin{display:inline-flex;}
 .m3e-extfab-spin svg{animation:m3e-rot 1.1s linear infinite;}

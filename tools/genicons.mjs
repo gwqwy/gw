@@ -28,6 +28,8 @@ const ICONS = [
   "crop_square", "select_all", "upload", "share", "terminal", "bolt", "lightbulb", "bakery_dining", "ramen_dining", "circle", "group", "arrow_upward", "arrow_downward", "pan_tool", "pause_circle", "web", "table_chart", "check_box_outline_blank", "notifications", "play_circle", "view_carousel", "vertical_split", "keyboard_arrow_down", "account_circle", "table_rows", "grid_view", "schedule", "inbox", "menu_open", "event_available", "subdirectory_arrow_right",
   // v1.1.0 新增组件
   "view_week", "subject", "timeline", "double_arrow", "format_quote", "integration_instructions",
+  // v1.2.0：锁定 / 图片 / 模板 / 新组件
+  "lock", "mail", "mobile", "dashboard_customize", "show_chart", "bar_chart", "pie_chart", "dialpad", "pin",
 ];
 
 function bodyOf(file) {

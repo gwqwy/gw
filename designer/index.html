@@ -71,6 +71,7 @@
       <div class="panel-sec">
         <div class="sec-t"><span class="m3e-ic" data-ic="devices"></span>页面（按跳转关系分层）
           <span class="spacer"></span>
+          <button class="ibtn s" id="pgTpl" title="从模板新建页面"><span class="m3e-ic" data-ic="dashboard_customize"></span></button>
           <button class="ibtn s" id="pgNew" title="新建手机页面"><span class="m3e-ic" data-ic="add"></span></button>
         </div>
         <div id="pageList"></div>
@@ -108,6 +109,8 @@
           <option value="vue">目标：Vue 3</option>
           <option value="html">目标：纯 HTML</option>
           <option value="web">目标：通用 Web</option>
+          <option value="compose">目标：Android (Compose)</option>
+          <option value="flutter">目标：Flutter</option>
         </select>
         <div class="btnrow" style="margin:2px 0 0;">
           <button class="mini" id="codeCopy"><span class="m3e-ic" data-ic="content_copy"></span>复制</button>
@@ -149,6 +152,7 @@
 <script src="js/tokens.js"></script>
 <script src="js/m3estyle.js"></script>
 <script src="js/registry.js"></script>
+<script src="js/templates.js"></script>
 <script src="js/uiverse.js"></script>
 <script src="js/scope.js"></script>
 <script src="js/gx/manifest.js"></script>

@@ -66,7 +66,9 @@
   REG.shellStyle = function (it) {
     const r = REG.rr(it, REG.shellRadius(it));
     const ovf = it.kind === "tooltip" ? "" : "overflow:hidden;";
-    return `left:${it.x}px;top:${it.y}px;width:${it.w}px;height:${it.h}px;border-radius:${r}px;${ovf}`;
+    const op = it.opacity == null || it.opacity >= 100 ? "" : `opacity:${Math.max(0, Math.min(100, it.opacity)) / 100};`;
+    const rot = it.rotate ? `transform:rotate(${it.rotate}deg);` : "";
+    return `left:${it.x}px;top:${it.y}px;width:${it.w}px;height:${it.h}px;border-radius:${r}px;${op}${rot}${ovf}`;
   };
   REG.shellRadius = function (it) {
     if (it.radius != null) return it.radius; // 组件可自定义圆角
@@ -1009,6 +1011,157 @@
       return `<div class="m3e-codeblk">${it.lang ? `<span class="lang">${esc(it.lang)}</span>` : ""}<pre>${esc(it.label)}</pre></div>`;
     },
     desc: it => `一个${it.lang ? it.lang + " " : ""}代码块，内容「${String(it.label).slice(0, 40)}${String(it.label).length > 40 ? "…" : ""}」`,
+  });
+
+  /* ============ v1.2.0 第三批（加载占位 / 图表 / 会话 / 输入扩展） ============ */
+
+  REG.add({
+    kind: "skeleton", name: "骨架屏", cat: "content", icon: "grid_on",
+    sig: "skRows",
+    spec: { w: T.CONTENT_W, h: 168, skRows: 3 },
+    props: [],
+    propDefs: [{ k: "skRows", label: "骨架行数", type: "num", min: 1, max: 6 }],
+    render(it) {
+      const n = Math.max(1, Math.min(6, it.skRows || 3));
+      let rows = "";
+      for (let i = 0; i < n; i++) {
+        rows += `<div class="sk-row"><span class="sk-av"></span><span class="sk-lines"><i class="sk-l" style="width:${72 - (i % 3) * 14}%;"></i><i class="sk-l" style="width:${46 - (i % 2) * 12}%;"></i></span></div>`;
+      }
+      return `<div class="m3e-skel">${rows}</div>`;
+    },
+    desc: it => `一个骨架屏加载占位（${Math.max(1, Math.min(6, it.skRows || 3))} 行：圆形头像 + 两行微光灰条，与空状态/加载指示器区分——它表达"内容即将到来"）`,
+  });
+
+  REG.add({
+    kind: "chartLine", name: "折线图占位", cat: "content", icon: "show_chart",
+    sig: "chPts",
+    spec: { w: T.CONTENT_W, h: 180, chPts: 6, chFill: true, chGrid: true },
+    props: [],
+    propDefs: [
+      { k: "chPts", label: "数据点数", type: "num", min: 3, max: 12 },
+      { k: "chFill", label: "面积填充", type: "chk" },
+      { k: "chGrid", label: "网格线", type: "chk" },
+    ],
+    render(it) {
+      const n = Math.max(3, Math.min(12, it.chPts || 6));
+      const vals = [35, 55, 42, 68, 50, 78, 60, 85, 70, 92, 80, 96];
+      const W = 100, H = 60;
+      const px = i => +(i * W / (n - 1)).toFixed(2), py = v => +(H - v * H / 100).toFixed(2);
+      let pts = "";
+      for (let i = 0; i < n; i++) pts += `${px(i)},${py(vals[i % vals.length])} `;
+      let grid = "";
+      if (it.chGrid !== false) for (let g = 1; g < 4; g++) grid += `<line x1="0" y1="${(H * g / 4).toFixed(1)}" x2="${W}" y2="${(H * g / 4).toFixed(1)}" stroke="var(--out-var)" stroke-width="0.6" stroke-dasharray="2 2"/>`;
+      const area = it.chFill !== false ? `<polygon points="0,${H} ${pts}${W},${H}" fill="var(--pri)" opacity=".14"/>` : "";
+      let dots = "";
+      for (let i = 0; i < n; i++) dots += `<circle cx="${px(i)}" cy="${py(vals[i % vals.length])}" r="1.6" fill="var(--pri)"/>`;
+      return `<div class="m3e-chart"><svg viewBox="0 0 100 60" preserveAspectRatio="none">${grid}${area}<polyline points="${pts}" fill="none" stroke="var(--pri)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>${dots}</svg></div>`;
+    },
+    desc: it => `一个折线图占位（${Math.max(3, Math.min(12, it.chPts || 6))} 个数据点，${it.chFill !== false ? "带面积填充、" : ""}${it.chGrid !== false ? "带网格线" : "无网格"}——图表为示意骨架，接入真实数据时替换）`,
+  });
+
+  REG.add({
+    kind: "chartBar", name: "柱状图占位", cat: "content", icon: "bar_chart",
+    sig: "chBars",
+    spec: { w: T.CONTENT_W, h: 180, chBars: 6, chLine: true },
+    props: [],
+    propDefs: [
+      { k: "chBars", label: "柱子数量", type: "num", min: 3, max: 12 },
+      { k: "chLine", label: "均值虚线", type: "chk" },
+    ],
+    render(it) {
+      const n = Math.max(3, Math.min(12, it.chBars || 6));
+      const vals = [40, 66, 52, 82, 58, 92, 48, 74, 62, 88, 70, 96];
+      const H = 60, bw = 100 / n;
+      let bars = "";
+      let maxV = 0;
+      for (let i = 0; i < n; i++) maxV = Math.max(maxV, vals[i % vals.length]);
+      for (let i = 0; i < n; i++) {
+        const v = vals[i % vals.length];
+        const h = +(v * (H - 6) / 100).toFixed(2);
+        bars += `<rect x="${(i * bw + bw * 0.22).toFixed(2)}" y="${(H - h).toFixed(2)}" width="${(bw * 0.56).toFixed(2)}" height="${h}" rx="1.2" fill="var(--pri)" opacity="${v === maxV ? "1" : ".38"}"/>`;
+      }
+      const avg = vals.slice(0, n).reduce((s, v) => s + v, 0) / n;
+      const line = it.chLine !== false ? `<line x1="0" y1="${(H - avg * (H - 6) / 100).toFixed(2)}" x2="100" y2="${(H - avg * (H - 6) / 100).toFixed(2)}" stroke="var(--on-sur-var)" stroke-width="0.7" stroke-dasharray="3 2"/>` : "";
+      return `<div class="m3e-chart"><svg viewBox="0 0 100 60" preserveAspectRatio="none"><line x1="0" y1="${H - 0.5}" x2="100" y2="${H - 0.5}" stroke="var(--out-var)" stroke-width="0.6"/>${bars}${line}</svg></div>`;
+    },
+    desc: it => `一个柱状图占位（${Math.max(3, Math.min(12, it.chBars || 6))} 根柱子，最高柱高亮${it.chLine !== false ? "，带均值虚线" : ""}）`,
+  });
+
+  REG.add({
+    kind: "chartDonut", name: "环形占比图", cat: "content", icon: "pie_chart",
+    sig: "chPct",
+    spec: { w: 140, h: 140, chPct: 68, chLabel: "68%" },
+    props: [],
+    propDefs: [
+      { k: "chPct", label: "占比（%）", type: "num", min: 5, max: 100 },
+      { k: "chLabel", label: "中心文字", type: "txt" },
+    ],
+    render(it) {
+      const p = Math.max(5, Math.min(100, it.chPct == null ? 68 : it.chPct));
+      const c = 2 * Math.PI * 18;
+      return `<div class="m3e-donut"><svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="var(--pri-c)" stroke-width="5"/><circle cx="24" cy="24" r="18" stroke="var(--pri)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${(c * (1 - p / 100)).toFixed(2)}" transform="rotate(-90 24 24)"/></svg><span class="dl2">${esc(it.chLabel == null ? p + "%" : it.chLabel)}</span></div>`;
+    },
+    desc: it => `一个环形占比图，当前 ${Math.max(5, Math.min(100, it.chPct == null ? 68 : it.chPct))}%${it.chLabel ? `，中心文字「${it.chLabel}」` : ""}`,
+  });
+
+  REG.add({
+    kind: "chatBubble", name: "聊天气泡", cat: "content", icon: "chat_bubble",
+    sig: "chatSide",
+    spec: { w: 250, h: 68, label: "你好，请问有什么可以帮你？", chatSide: "left", chatTime: "10:24" },
+    props: ["label"],
+    propDefs: [
+      { k: "chatSide", label: "气泡位置", type: "sel", opts: [["left", "左侧（对方）"], ["right", "右侧（我方）"]] },
+      { k: "chatTime", label: "时间角标", type: "txt" },
+    ],
+    render(it) {
+      const me = it.chatSide === "right";
+      return `<div class="m3e-chatb${me ? " me" : ""}"><span class="bub">${esc(it.label)}</span>${it.chatTime ? `<span class="tm">${esc(it.chatTime)}</span>` : ""}</div>`;
+    },
+    desc: it => `一条${it.chatSide === "right" ? "我方（右侧绿色气泡）" : "对方（左侧灰色气泡）"}聊天消息：「${it.label}」${it.chatTime ? `，时间 ${it.chatTime}` : ""}`,
+  });
+
+  REG.add({
+    kind: "searchField", name: "搜索输入框", cat: "inputs", icon: "search",
+    inter: "input",
+    sig: "clearBtn",
+    spec: { w: T.CONTENT_W, h: 48, variant: "outlined", label: "搜索课程、讲师", value: "", clearBtn: true },
+    props: ["label", "value", "variant"], variantList: VARIANTS.textField,
+    propDefs: [{ k: "clearBtn", label: "尾部清除按钮", type: "chk" }],
+    render(it) {
+      const val = it.value
+        ? `<span class="val">${esc(it.value)}</span>`
+        : `<span class="val ph">${esc(it.label || "搜索")}</span>`;
+      const clr = it.clearBtn && it.value ? ic("close", 18) : "";
+      return `<div class="m3e-sfield v-${it.variant || "outlined"}">${ic("search", 20)}${val}${clr}</div>`;
+    },
+    desc: it => `一个胶囊搜索输入框，${it.value ? `已输入「${it.value}」` : `占位「${it.label || "搜索"}」`}${it.clearBtn && it.value ? "，尾部清除按钮" : ""}（${VN[it.variant] || it.variant}样式）`,
+  });
+
+  REG.add({
+    kind: "stepperInput", name: "数字步进器", cat: "inputs", icon: "pin",
+    sig: "stepBy",
+    spec: { w: 180, h: 48, label: "数量", value: 2, stepBy: 1 },
+    props: ["label", "value"], propLabels: { value: "当前值" },
+    propDefs: [{ k: "stepBy", label: "步长", type: "num", min: 1, max: 10 }],
+    render(it) {
+      return `<div class="m3e-stepin">${it.label ? `<span class="cap">${esc(it.label)}</span>` : ""}<button class="sib" aria-label="减少">−</button><span class="siv">${Math.max(0, +it.value || 0)}</span><button class="sib" aria-label="增加">+</button></div>`;
+    },
+    desc: it => `一个数字步进器：${it.label ? `「${it.label}」` : ""}当前 ${Math.max(0, +it.value || 0)}，步长 ${Math.max(1, Math.min(10, it.stepBy || 1))}`,
+  });
+
+  REG.add({
+    kind: "otpInput", name: "验证码输入", cat: "inputs", icon: "dialpad",
+    sig: "otpLen",
+    spec: { w: 250, h: 56, otpLen: 6 },
+    props: [],
+    propDefs: [{ k: "otpLen", label: "验证码位数", type: "num", min: 4, max: 8 }],
+    render(it) {
+      const n = Math.max(4, Math.min(8, it.otpLen || 6));
+      let cells = "";
+      for (let i = 0; i < n; i++) cells += `<span class="cell${i === 2 ? " cur" : ""}"></span>`;
+      return `<div class="m3e-otp">${cells}</div>`;
+    },
+    desc: it => `一个 ${Math.max(4, Math.min(8, it.otpLen || 6))} 位验证码分格输入（第三格为焦点态示意）`,
   });
 
   /* fill token → CSS 变量名 */

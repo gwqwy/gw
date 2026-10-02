@@ -27,7 +27,7 @@ function seededMath(seed) {
 const sandbox = { console, window: {}, JSON, Math: seededMath(20260926), Date, setTimeout, clearTimeout, RegExp, Object, Array };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
-for (const f of ["tokens.js", "icons.js", "m3estyle.js", "registry.js", "uiverse.js", "codegen.js"]) {
+for (const f of ["tokens.js", "icons.js", "m3estyle.js", "registry.js", "uiverse.js", "codegen.js", "templates.js"]) {
   vm.runInContext(fs.readFileSync(path.join(D, f), "utf8"), sandbox, { filename: f });
 }
 
@@ -39,8 +39,8 @@ const ok = (cond, name) => { console.log((cond ? "  ✓ " : "  ✗ ") + name); i
 
 /* 注册表完整性 */
 console.log("== 注册表 ==");
-ok(REG.order.length === 67, `67 种组件（实际 ${REG.order.length}）`);
-ok(Object.keys(REG.defs).length === 67, `defs 全部定义（实际 ${Object.keys(REG.defs).length}）`);
+ok(REG.order.length === 75, `75 种组件（实际 ${REG.order.length}）`);
+ok(Object.keys(REG.defs).length === 75, `defs 全部定义（实际 ${Object.keys(REG.defs).length}）`);
 for (const k of REG.order) {
   const d = REG.defs[k];
   if (!d || !d.spec || !d.render || !d.desc || !d.cat) { ok(false, `${k} 定义不完整`); }
@@ -195,6 +195,29 @@ const cbH2 = REG.defs.codeBlock.render(mkItem("codeBlock"));
 ok(cbH2.includes('class="lang"') && cbH2.includes("<pre>"), "代码块带语言角标");
 const tlH = REG.defs.timeline.render(Object.assign(mkItem("timeline"), { tlLine: "dashed" }));
 ok(tlH.includes("dashed") && tlH.includes('class="dot"'), "时间线虚线连线可切换");
+
+/* v1.2.0：新组件 / 透明度旋转 / 提示词新目标 / 页面模板 */
+console.log("== v1.2.0 新增 ==");
+const skH = REG.defs.skeleton.render(mkItem("skeleton"));
+ok(skH.includes("sk-av") && skH.includes("sk-l"), "骨架屏渲染头像与灰条");
+ok(REG.defs.chartLine.render(mkItem("chartLine")).includes("<polyline"), "折线图渲染折线");
+ok(REG.defs.chartBar.render(mkItem("chartBar")).includes("<rect"), "柱状图渲染柱体");
+ok(REG.defs.chartDonut.render(Object.assign(mkItem("chartDonut"), { chPct: 72 })).includes("stroke-dasharray"), "环形图渲染占比弧");
+const chatR = REG.defs.chatBubble.render(Object.assign(mkItem("chatBubble"), { chatSide: "right" }));
+const chatL = REG.defs.chatBubble.render(mkItem("chatBubble"));
+ok(chatR.includes(" me") && !chatL.includes(" me"), "聊天气泡支持左右侧切换");
+ok((REG.defs.otpInput.render(Object.assign(mkItem("otpInput"), { otpLen: 6 })).match(/class="cell/g) || []).length === 6, "验证码输入按位数渲染格子");
+const rotHtml = GEN.itemHTML(Object.assign(REG.create("button", 0, 0, design.theme), { opacity: 60, rotate: 15 }), { theme: design.theme });
+ok(rotHtml.includes("opacity:0.6") && rotHtml.includes("rotate(15deg)"), "透明度与旋转写入导出样式");
+const rotDef = GEN.itemHTML(REG.create("button", 0, 0, design.theme), { theme: design.theme });
+ok(!rotDef.includes("opacity:") && !rotDef.includes("transform:"), "默认不写入透明度/旋转样式");
+ok(GEN.prompt(design, { target: "compose" }).includes("Jetpack Compose"), "提示词支持 Compose 目标");
+ok(GEN.prompt(design, { target: "flutter" }).includes("Flutter"), "提示词支持 Flutter 目标");
+const tplOk = W.M3E_TPL && W.M3E_TPL.length === 7 && W.M3E_TPL.every(t => {
+  const pg = t.make(design.theme);
+  return pg && pg.items.length >= 3 && pg.items.every(i => !!REG.defs[i.kind]);
+});
+ok(tplOk, `页面模板库 7 套可生成且组件合法（实际 ${W.M3E_TPL ? W.M3E_TPL.length : 0} 套）`);
 
 /* 提示词 */
 console.log("== 提示词 ==");

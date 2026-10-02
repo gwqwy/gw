@@ -484,6 +484,47 @@
     b.addEventListener("click", onclick);
     return b;
   }
+
+  /* ================= 图片设置（本地文件内嵌 / URL） ================= */
+  function openImageModal(it) {
+    let picked = "";
+    const isData = it.src && it.src.slice(0, 5) === "data:";
+    showModal({
+      title: "设置图片",
+      body: `<div class="frow wide"><label>本地图片（转为内嵌 dataURL，离线可用）</label><input type="file" class="img-file" accept="image/*"/></div>
+        <div class="frow wide"><label>或图片 URL${isData ? "（当前为内嵌图片）" : ""}</label><input type="text" class="img-url" value="${isData ? "" : REG.esc(it.src || "")}" placeholder="https://…"/></div>
+        <div class="img-prev">${it.src ? `<img src="${REG.esc(it.src)}" alt=""/>` : `<span class="hint">未设置图片</span>`}</div>
+        <div class="hint">建议图片小于 500KB：内嵌图片会写入项目与导出文件，过大会拖慢保存与生成。</div>`,
+      okText: "确定",
+      onOk: (v, card) => {
+        const url = card.querySelector(".img-url").value.trim();
+        const next = picked || url;
+        if (next === (it.src || "")) return;
+        pushHistory();
+        if (next) it.src = next; else delete it.src;
+        renderAll(); autosave();
+        toast("图片已更新");
+      },
+    });
+    /* 文件选择后立即读取预览（异步），确定时随 onOk 提交 */
+    requestAnimationFrame(() => {
+      const card = $("#modal .modal-card");
+      if (!card) return;
+      const f = card.querySelector(".img-file"), prev = card.querySelector(".img-prev"), urlI = card.querySelector(".img-url");
+      f.addEventListener("change", () => {
+        const file = f.files && f.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { toast("图片超过 2MB，请压缩后再选"); f.value = ""; return; }
+        const rd = new FileReader();
+        rd.onload = () => {
+          picked = String(rd.result || "");
+          if (prev) prev.innerHTML = `<img src="${picked}" alt=""/>`;
+          if (urlI) urlI.value = "";
+        };
+        rd.readAsDataURL(file);
+      });
+    });
+  }
   function svg(name, size, fill) {
     const set = window.M3E_ICONS || {};
     const e = set[name] || set.check_box_outline_blank || { b: '<circle cx="480" cy="-480" r="280"/>' };
@@ -550,7 +591,7 @@
         }
       }
       const el = document.createElement("div");
-      el.className = "citem" + (sel.has(it.id) ? " csel" : "");
+      el.className = "citem" + (sel.has(it.id) ? " csel" : "") + (it.locked ? " locked" : "");
       el.dataset.item = it.id;
       el.style.cssText = REG.shellStyle(it);
       el.innerHTML = GEN.itemInner(it, { theme: design.theme });
@@ -726,14 +767,19 @@
     }
     if (e.shiftKey) { sel.has(itemId) ? sel.delete(itemId) : sel.add(itemId); expandGroupsSel(); renderSelection(); return; }
     if (!sel.has(itemId)) { sel.clear(); sel.add(itemId); expandGroupsSel(); renderSelection(); }
+    /* 锁定组件：只选中，不可拖动（解锁后再移动） */
+    const target = page.items.find(i => i.id === itemId);
+    if (target && target.locked) { renderSelection(); return; }
     setPage(page.id);
     const w0 = worldFromEvent(e);
     moveState = {
       start: w0,
       items: [...sel].map(id => curItems().find(i => i.id === id)).filter(Boolean)
+        .filter(i => !i.locked)
         .map(i => ({ it: i, x: i.x, y: i.y })),
       moved: false,
     };
+    if (!moveState.items.length) { renderSelection(); return; }
     pushHistory();
     capture(e);
     document.addEventListener("gd-move", onMoveMove);
@@ -838,6 +884,7 @@
     e.stopPropagation(); e.preventDefault();
     const it = curItems().find(i => i.id === [...sel][0]);
     if (!it) return;
+    if (it.locked) return toast("组件已锁定（Ctrl+L 解锁）");
     const w0 = worldFromEvent(e);
     rsState = { it, h, x0: w0.x, y0: w0.y, ox: it.x, oy: it.y, ow: it.w, oh: it.h };
     pushHistory();
@@ -1586,6 +1633,29 @@
   function addChildPage(p) {
     openNewPageModal("phone", p);
   }
+  /** 从模板新建页面（模板定义见 js/templates.js） */
+  function openTplModal() {
+    const list = window.M3E_TPL || [];
+    if (!list.length) return toast("模板库未加载");
+    showModal({
+      title: "从模板新建页面",
+      body: `<div class="tpl-grid">${list.map((t, i) =>
+        `<label class="tpl-card"><input type="radio" name="tpl" value="${t.id}"${i === 0 ? " checked" : ""}/><b>${REG.esc(t.name)}</b><i>${t.kind === "desktop" ? "桌面 1280×800" : "手机 412×892"} · ${REG.esc(t.desc)}</i></label>`).join("")}</div>`,
+      okText: "创建",
+      onOk: (v, card) => {
+        const picked = card.querySelector("input[name=tpl]:checked");
+        const t = list.find(x => x.id === (picked && picked.value));
+        if (!t) return;
+        pushHistory();
+        const p = t.make(design.theme);
+        design.pages.push(p);
+        curPageId = p.id;
+        sel.clear();
+        renderAll(); fitView(); autosave();
+        toast(`已从模板创建「${p.name}」（${p.items.length} 个组件）`);
+      },
+    });
+  }
   /** 新建页面（可选自定义尺寸、父页面） */
   function openNewPageModal(preset, parent) {
     showModal({
@@ -1716,7 +1786,7 @@
       row.className = "layer-row" + (sub ? " sub" : "") + (sel.has(it.id) ? " on" : "");
       row.draggable = true;
       row.title = "拖动到图层行可移动图层；单击设为当前图层；双击改组件名称";
-      row.innerHTML = `<span class="m3e-ic">${svg(d.icon, 16)}</span><span class="ln">${REG.esc(it.name || it.label || d.name)}</span><span class="lk">${d.name}</span>`;
+      row.innerHTML = `<span class="m3e-ic">${svg(d.icon, 16)}</span>${it.locked ? `<span class="m3e-ic lk" title="已锁定">${svg("lock", 12)}</span>` : ""}<span class="ln">${REG.esc(it.name || it.label || d.name)}</span><span class="lk">${d.name}</span>`;
       const startRename = lnEl => {
         if (lnEl.querySelector("input")) return;
         lnEl.innerHTML = `<input type="text" value="${REG.esc(it.name || it.label || d.name)}"/>`;
@@ -1955,12 +2025,15 @@
       h += `<div class="sec-t">${multi ? `已选 ${selArr.length} 个组件` : def.name}</div>`;
     }
     h += `<div class="grid2">${field("X", num("x", Math.round(it.x)))}${field("Y", num("y", Math.round(it.y)))}${field("宽", num("w", Math.round(it.w)))}${field("高", num("h", Math.round(it.h)))}</div>`;
+    h += `<div class="grid2">${field("透明度", num("opacity", it.opacity == null ? 100 : it.opacity))}${field("旋转°", num("rotate", it.rotate || 0))}</div>`;
     /* 组件圆角：所有组件均可调整（覆盖默认值） */
     const radiusDef = REG.shellRadius(Object.assign({}, it, { radius: null }));
     const radiusEff = it.radius != null ? it.radius : radiusDef;
     h += field("圆角", `${num("radius", radiusEff)}<button class="mini" data-op="radiusreset" title="恢复默认圆角">默认</button>`);
     /* 组件名称：显示在图层面板，可在面板双击修改 */
     h += field("组件名称", txt("__itemname", it.name || def.name));
+    /* 锁定：锁定后不可拖动/缩放/删除（Ctrl+L 切换） */
+    h += field("锁定", chk("__locked", !!it.locked));
     /* 所属图层：把组件加入/移出图层 */
     const gAll = page.groups || [];
     const myGid = it.gid && gAll.some(g => g.id === it.gid) ? it.gid : "";
@@ -2126,6 +2199,24 @@
       return;
     }
     if (!it) return;
+    if (k === "__locked") {
+      /* 锁定：应用到当前选中的所有组件 */
+      for (const i of selItems()) { if (el.checked) i.locked = true; else delete i.locked; }
+      renderCanvas(); renderLayers();
+      return;
+    }
+    if (k === "opacity") {
+      const v = Math.max(0, Math.min(100, +el.value || 100));
+      if (v >= 100) delete it.opacity; else it.opacity = v;
+      redrawItem(it);
+      return;
+    }
+    if (k === "rotate") {
+      const v = ((Math.round(+el.value || 0) % 360) + 360) % 360;
+      if (v) it.rotate = v; else delete it.rotate;
+      redrawItem(it);
+      return;
+    }
     if (["x", "y", "w", "h", "size", "radius", "rows"].includes(k)) {
       it[k] = +el.value || 0;
     } else if (["label", "supporting", "note", "icon", "icon2", "html", "css", "vueScript"].includes(k)) {
@@ -2180,7 +2271,7 @@
   }
 
   function doInspectorOp(op, it, page) {
-    const selArr = [...sel].map(id => page.items.find(i => i.id === id)).filter(Boolean);
+    const selArr = [...sel].map(id => page.items.find(i => i.id === id)).filter(Boolean).filter(i => !i.locked);
     pushHistory();
     if (op === "radiusreset") { delete it.radius; }
     if (op === "pickbg") { openColorPicker(page, it); }
@@ -2196,8 +2287,7 @@
       if (it.kind === "fabMenu") it.h = 16 + it.tabs.length * 56 + 8;
       if (it.kind === "accordion") it.h = Math.max(64, it.tabs.length * 56 + 16);
     } else if (op === "pickimg") {
-      const url = prompt("输入图片 URL 或 data: 地址：", it.src || "");
-      if (url != null) it.src = url;
+      openImageModal(it);
     } else if (op === "clearimg") { it.src = ""; }
     else if (op === "alL" || op === "alR" || op === "alT" || op === "alB") {
       if (selArr.length < 2) return;
@@ -2239,6 +2329,7 @@
     add("生成副本 (Ctrl+D)", doDuplicate, "add_box");
     add("编组 (Ctrl+G)", groupSelection, "group");
     add("取消编组 (Ctrl+Shift+G)", ungroupSelection, "layers");
+    add(selItems().some(i => i.locked) ? "解锁 (Ctrl+L)" : "锁定 (Ctrl+L)", toggleLock, "lock");
     add("保存为自定义组件…", saveSelectionAsWidget, "star");
     m.appendChild(document.createElement("hr"));
     add("复制组件代码 HTML", () => copyItemCode("html"), "code");
@@ -2347,12 +2438,24 @@
   }
   function doDelete() {
     if (!sel.size) return;
-    pushHistory();
     const page = curPage();
-    page.items = page.items.filter(i => !sel.has(i.id));
+    const del = selItems().filter(i => !i.locked);
+    if (!del.length) return toast("选中组件已锁定，先解锁（Ctrl+L）再删除");
+    pushHistory();
+    const ids = new Set(del.map(i => i.id));
+    page.items = page.items.filter(i => !ids.has(i.id));
     sel.clear();
     renderAll(); autosave();
     toast("已删除");
+  }
+  /** 锁定/解锁选中组件（Ctrl+L）：锁定后不可拖动、缩放、删除 */
+  function toggleLock() {
+    const arr = selItems();
+    if (!arr.length) return toast("未选中组件");
+    const toLock = !arr[0].locked;
+    arr.forEach(i => { if (toLock) i.locked = true; else delete i.locked; });
+    renderCanvas(); renderLayers(); renderInspector(); autosave();
+    toast(toLock ? `已锁定 ${arr.length} 个组件` : `已解锁 ${arr.length} 个组件`);
   }
   function copyItemCode(format) {
     const arr = selItems();
@@ -2632,6 +2735,7 @@
         if (k === "v") { if (!inField) { e.preventDefault(); doPaste(); } return; }
         if (k === "d") { if (!inField) { e.preventDefault(); doDuplicate(); } return; }
         if (k === "g") { if (!inField) { e.preventDefault(); e.shiftKey ? ungroupSelection() : groupSelection(); } return; }
+        if (k === "l") { if (!inField) { e.preventDefault(); toggleLock(); } return; }
         if (k === "s") { e.preventDefault(); saveProject(); return; }
         if (k === "o") { e.preventDefault(); openProject(); return; }
         return;
@@ -2647,8 +2751,10 @@
         const d = e.shiftKey ? 8 : 1;
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
         const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
+        const movable = selItems().filter(i => !i.locked);
+        if (!movable.length) return toast("选中组件已锁定");
         pushHistory();
-        for (const it of selItems()) { it.x += dx; it.y += dy; redrawItem(it); }
+        for (const it of movable) { it.x += dx; it.y += dy; redrawItem(it); }
         renderSelectionLight(); autosave();
         return;
       }
@@ -2683,6 +2789,7 @@
     $$("[data-ic]").forEach(el => { el.innerHTML = svg(el.dataset.ic, 18); });
     /* 页面/图层操作按钮 */
     $("#pgNew").addEventListener("click", () => openNewPageModal("phone"));
+    $("#pgTpl").addEventListener("click", openTplModal);
     /* 图层排序按钮 + 新建图层 */
     $("#lyNew").addEventListener("click", () => {
       pushHistory();
