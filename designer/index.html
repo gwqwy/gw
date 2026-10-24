@@ -28,6 +28,7 @@
   <button class="ibtn" id="btnZoomIn" title="放大"><span class="m3e-ic" data-ic="zoom_in"></span></button>
   <button class="tbtn" id="btnFit" title="适应窗口 (0)"><span class="m3e-ic" data-ic="fit_screen"></span>适应</button>
   <span class="spacer"></span>
+  <button class="tbtn" id="btnAI" title="AI 助手：用自然语言新建/编辑页面（或粘贴 AI 生成的协议 JSON）"><span class="m3e-ic" data-ic="smart_toy"></span>AI</button>
   <button class="tbtn" id="btnTheme" title="主题（配色/深色/形状）"><span class="m3e-ic" data-ic="palette"></span>主题</button>
   <button class="tbtn" id="btnPreview" title="程序内预览 (P)"><span class="m3e-ic" data-ic="visibility"></span>预览</button>
   <button class="tbtn primary" id="btnExport" title="导出全部文件（HTML/Vue/提示词/项目）"><span class="m3e-ic" data-ic="download"></span>导出全部</button>
@@ -145,6 +146,37 @@
   <div class="pv-body"><iframe id="pvFrame"></iframe></div>
 </div>
 
+<div id="aiOverlay">
+  <div class="ai-card">
+    <div class="ai-head">
+      <span class="ttl"><span class="m3e-ic" data-ic="smart_toy"></span>AI 助手</span>
+      <span class="spacer"></span>
+      <select id="aiProvider" title="AI 服务商（Key 仅保存在本机）">
+        <option value="openai">OpenAI</option>
+        <option value="claude">Claude</option>
+        <option value="gemini">Gemini</option>
+        <option value="deepseek">DeepSeek</option>
+      </select>
+      <input id="aiModel" placeholder="模型名（如 gpt-4o-mini）" title="模型名"/>
+      <input id="aiKey" type="password" placeholder="API Key（仅保存在本机）" title="API Key"/>
+      <button class="mini" id="aiClose">关闭 (Esc)</button>
+    </div>
+    <div class="ai-hint">两种用法：<b>直连</b>——填 Key 后用自然语言描述，AI 返回协议 JSON 并本地校验后应用；<b>离线</b>——点「复制协议与上下文」粘给任意 AI，把它返回的 JSON 粘回下方「AI 回复」框再应用。<b>本机服务</b>：<span id="aiLocalUrl">http://127.0.0.1:41289</span>（AI 工具可直接 GET /api/context · POST /api/op 操作画布，无需人工粘贴）。协议操作：createPage / addItems / updateItem / deleteItems / setTheme。</div>
+    <textarea id="aiAsk" rows="3" placeholder="描述要新建或修改的页面，例如：新建一个登录页，标题「欢迎回来」，含账号、密码输入框和登录按钮，底部可跳转「首页」"></textarea>
+    <div class="btnrow">
+      <button class="mini primary" id="aiSend"><span class="m3e-ic" data-ic="send"></span>发送给 AI</button>
+      <button class="mini" id="aiCopyProto" title="复制协议 + 当前设计上下文，粘贴给任意 AI（离线工作流）"><span class="m3e-ic" data-ic="content_copy"></span>复制协议与上下文</button>
+      <span class="spacer"></span>
+      <span id="aiStatus"></span>
+    </div>
+    <div class="ai-out-head">AI 回复（可手动粘贴协议 JSON）</div>
+    <textarea id="aiReply" rows="9" spellcheck="false" placeholder='在此粘贴 AI 按协议生成的 JSON，例如：{"op":"createPage","page":{"name":"登录"},"items":[...]}'></textarea>
+    <div class="btnrow">
+      <button class="mini primary" id="aiApply" disabled><span class="m3e-ic" data-ic="check"></span>应用到设计</button>
+    </div>
+  </div>
+</div>
+
 <div id="ctxmenu"></div>
 <div id="toast"></div>
 
@@ -158,6 +190,7 @@
 <script src="js/gx/manifest.js"></script>
 <script src="js/gx.js"></script>
 <script src="js/codegen.js"></script>
+<script src="js/aiapi.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

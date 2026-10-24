@@ -30,6 +30,8 @@ const ICONS = [
   "view_week", "subject", "timeline", "double_arrow", "format_quote", "integration_instructions",
   // v1.2.0：锁定 / 图片 / 模板 / 新组件
   "lock", "mail", "mobile", "dashboard_customize", "show_chart", "bar_chart", "pie_chart", "dialpad", "pin",
+  // v1.2.0：AI 助手
+  "smart_toy",
 ];
 
 function bodyOf(file) {

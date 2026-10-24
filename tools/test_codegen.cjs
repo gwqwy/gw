@@ -27,7 +27,7 @@ function seededMath(seed) {
 const sandbox = { console, window: {}, JSON, Math: seededMath(20260926), Date, setTimeout, clearTimeout, RegExp, Object, Array };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
-for (const f of ["tokens.js", "icons.js", "m3estyle.js", "registry.js", "uiverse.js", "codegen.js", "templates.js"]) {
+for (const f of ["tokens.js", "icons.js", "m3estyle.js", "registry.js", "uiverse.js", "codegen.js", "templates.js", "aiapi.js"]) {
   vm.runInContext(fs.readFileSync(path.join(D, f), "utf8"), sandbox, { filename: f });
 }
 
@@ -218,6 +218,49 @@ const tplOk = W.M3E_TPL && W.M3E_TPL.length === 7 && W.M3E_TPL.every(t => {
   return pg && pg.items.length >= 3 && pg.items.every(i => !!REG.defs[i.kind]);
 });
 ok(tplOk, `页面模板库 7 套可生成且组件合法（实际 ${W.M3E_TPL ? W.M3E_TPL.length : 0} 套）`);
+
+/* v1.2.0：AI 接口（协议解析 + 应用引擎） */
+console.log("== AI 接口 ==");
+const AI = W.M3E_AI;
+ok(typeof AI.schemaDoc() === "string" && AI.schemaDoc().includes("createPage") && AI.schemaDoc().includes("updateItem"), "协议文档包含五种操作");
+ok(AI.extractJSON('说明\n```json\n{"op":"setTheme","palette":"teal"}\n```\n结尾').ok && AI.extractJSON('说明\n```json\n{"op":"setTheme","palette":"teal"}\n```\n结尾').value.op === "setTheme", "从 markdown 围栏提取 JSON");
+ok(AI.extractJSON("这不是 JSON").ok === false, "无效输入返回错误");
+ok(AI.extractJSON('前缀文字 {"op":"setTheme"} 后缀文字').value.op === "setTheme", "从混排文本中截取 JSON");
+
+const dAI = { name: "AI测试", theme: { palette: "purple", dark: false, shape: "rounded" }, pages: [T.defaultPage("首页", "phone")] };
+const rCreate = AI.applyOp(dAI, {
+  op: "createPage", page: { name: "登录", kind: "phone" },
+  items: [
+    { kind: "topAppBar", x: 0, y: 0, label: "登录", nosuchfield: 1 },
+    { kind: "textField", x: 16, y: 120, label: "账号" },
+    { kind: "nope", x: 0, y: 0 },
+  ],
+});
+ok(rCreate.ok && dAI.pages.length === 2, "createPage 新建页面");
+ok(rCreate.warns.length === 2 && rCreate.warns.some(w => w.includes("nosuchfield")) && rCreate.warns.some(w => w.includes("nope")), "未知字段/未知类型降级为警告");
+const pgAI = dAI.pages[1];
+ok(pgAI.items[0].kind === "topAppBar" && pgAI.items[1].label === "账号", "条目字段已规范化合并默认值");
+ok(AI.applyOp(dAI, { op: "createPage", page: { name: "登录" } }).ok === false, "同名页面被拒绝");
+
+const rAdd = AI.applyOp(dAI, { op: "addItems", page: "登录", items: [{ kind: "button", x: 16, y: 600, label: "去首页", action: "首页" }] });
+ok(rAdd.ok && pgAI.items.length === 3, "addItems 按页面名追加组件");
+ok(pgAI.items[2].action === dAI.pages[0].id, "action 按页面名解析为内部 id");
+
+const rUpd = AI.applyOp(dAI, { op: "updateItem", page: "登录", match: { kind: "button" }, patch: { label: "返回首页", w: 200 } });
+ok(rUpd.ok && pgAI.items[2].label === "返回首页" && pgAI.items[2].w === 200, "updateItem 按 match 定位并合并 patch");
+const rClamp = AI.applyOp(dAI, { op: "updateItem", page: "登录", match: { kind: "button" }, patch: { x: 9999, w: 9999 } });
+ok(rClamp.ok && pgAI.items[2].x <= 412 - 12 && pgAI.items[2].w <= 412, "越界坐标/尺寸被钳回页面内");
+const rDel = AI.applyOp(dAI, { op: "deleteItems", page: "登录", match: { label: "返回首页" } });
+ok(rDel.ok && pgAI.items.length === 2, "deleteItems 删除匹配项");
+ok(AI.applyOp(dAI, { op: "updateItem", page: "登录", match: { label: "不存在" }, patch: { label: "x" } }).ok === false, "匹配不到组件时报错");
+
+const rTheme = AI.applyOp(dAI, { op: "setTheme", palette: "teal", dark: true });
+ok(rTheme.ok && dAI.theme.palette === "teal" && dAI.theme.dark === true, "setTheme 生效");
+ok(AI.applyOp(dAI, { op: "setTheme", palette: "nope" }).ok === false, "非法色板报错");
+ok(AI.applyOp(dAI, { op: "wat" }).ok === false, "未知 op 报错");
+
+const ctxAI = AI.exportContext(dAI, pgAI.id);
+ok(ctxAI.currentPage === "登录" && ctxAI.pages.length === 2 && ctxAI.pages[1].items.some(i => i.kind === "textField"), "exportContext 输出含当前页的紧凑上下文");
 
 /* 提示词 */
 console.log("== 提示词 ==");

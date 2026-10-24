@@ -2526,6 +2526,182 @@
     });
   }
 
+  /* ================= AI 助手（协议见 js/aiapi.js；直连 BYO Key 或离线粘贴工作流） ================= */
+  const AI = () => window.M3E_AI;
+  let aiSettings = { provider: "openai", model: "", key: "", baseUrl: "" };
+  let aiPending = null; /* 校验通过的待应用 op */
+
+  function loadAISettings() {
+    try { Object.assign(aiSettings, JSON.parse(localStorage.getItem("m3e_designer_ai") || "{}")); } catch (e) { /* 忽略 */ }
+  }
+  function saveAISettings() {
+    try { localStorage.setItem("m3e_designer_ai", JSON.stringify(aiSettings)); } catch (e) { /* 忽略 */ }
+  }
+  function aiStatus(msg, err) {
+    const el = $("#aiStatus");
+    el.textContent = msg || "";
+    el.classList.toggle("err", !!err);
+  }
+
+  const AI_RULES = `生成规则：
+- kind 只能用协议列出的类型；组件不得超出页面边界；遵循 M3 布局：边距 16、间距 8/16 的倍数，顶部应用栏贴顶 y=0，导航栏贴底。
+- 常用默认尺寸：按钮 128×56、文本输入框 380×56、卡片 380×223、列表项 380×72、顶部应用栏 412×88、导航栏 412×104、FAB 56×56；w/h 可省略。
+- 编辑现有页面时用 addItems / updateItem / deleteItems 并引用上下文中的页面与组件名；新建页面用 createPage。`;
+
+  function aiSystemPrompt() { return AI().schemaDoc() + "\n\n" + AI_RULES; }
+
+  function initAIPanel() {
+    loadAISettings();
+    window.M3E_AI.design = () => design; /* 控制台可编程入口：M3E_AI.applyOp(M3E_AI.design(), {...}) */
+
+    /* 本机 HTTP 服务（.NET 侧 TcpListener）挂接：AI 工具可直接 GET /api/context · POST /api/op 操作画布 */
+    window.__gwAI = Object.assign(window.__gwAI || {}, {
+      port: window.__gwAI && window.__gwAI.port ? window.__gwAI.port : 41289,
+      contextJson() { return JSON.stringify(AI().exportContext(design, curPageId)); },
+      /** 供 .NET 服务调用：应用一个协议操作或操作数组（依次应用，失败即停），返回报告 JSON 字符串 */
+      handleOpFromJson(s) {
+        try {
+          const input = JSON.parse(s);
+          const ops = Array.isArray(input) ? input : [input];
+          const reports = [];
+          for (const op of ops) {
+            pushHistory();
+            const rep = AI().applyOp(design, op);
+            if (!rep.ok) { undoStack.pop(); updateEditButtons(); reports.push(rep); break; }
+            if (rep.pageId) curPageId = rep.pageId;
+            reports.push(rep);
+          }
+          const okAll = reports.length > 0 && reports.every(r => r.ok);
+          const last = reports[reports.length - 1] || { ok: false, error: "空操作" };
+          if (okAll) { renderAll(); autosave(); }
+          return JSON.stringify({
+            ok: okAll,
+            applied: reports.filter(r => r.ok).map(r => r.applied),
+            warns: reports.flatMap(r => r.warns || []),
+            error: okAll ? undefined : last.error,
+            pageId: last.pageId,
+          });
+        } catch (e) {
+          return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+        }
+      },
+    });
+    const lu = $("#aiLocalUrl");
+    if (lu) lu.textContent = "http://127.0.0.1:" + window.__gwAI.port;
+
+    const ov = $("#aiOverlay"), prov = $("#aiProvider"), model = $("#aiModel"), key = $("#aiKey");
+    prov.value = aiSettings.provider;
+    model.value = aiSettings.model || "";
+    key.value = aiSettings.key || "";
+    const sync = () => {
+      aiSettings.provider = prov.value;
+      aiSettings.model = model.value.trim();
+      aiSettings.key = key.value.trim();
+      saveAISettings();
+    };
+    prov.addEventListener("change", sync);
+    model.addEventListener("change", sync);
+    key.addEventListener("change", sync);
+    $("#btnAI").addEventListener("click", () => { ov.classList.add("open"); });
+    $("#aiClose").addEventListener("click", () => ov.classList.remove("open"));
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && ov.classList.contains("open")) { ov.classList.remove("open"); e.stopPropagation(); }
+    }, true);
+    $("#aiSend").addEventListener("click", aiSend);
+    $("#aiCopyProto").addEventListener("click", aiCopyProto);
+    $("#aiReply").addEventListener("input", aiTryParse);
+    $("#aiApply").addEventListener("click", aiApply);
+  }
+
+  async function aiSend() {
+    const ask = $("#aiAsk").value.trim();
+    if (!ask) return aiStatus("请先描述需求", true);
+    if (!aiSettings.key) return aiStatus("请先填 API Key（没有 Key 可用「复制协议与上下文」离线工作流）", true);
+    aiStatus("请求中…");
+    const user = ask + "\n\n== 当前设计上下文 ==\n" + JSON.stringify(AI().exportContext(design, curPageId));
+    try {
+      const text = await aiComplete(aiSettings, aiSystemPrompt(), user);
+      $("#aiReply").value = text;
+      aiTryParse();
+    } catch (e) {
+      aiStatus("请求失败：" + (e && e.message || e), true);
+    }
+  }
+
+  /** 四家服务商的浏览器直连（与 m3e-canvas lib/ai.ts 同一套约定） */
+  async function aiComplete(s, sys, user) {
+    const base = (s.baseUrl || "").replace(/\/+$/, "");
+    let r;
+    if (s.provider === "openai" || s.provider === "deepseek") {
+      const url = (base || (s.provider === "deepseek" ? "https://api.deepseek.com" : "https://api.openai.com")) + "/chat/completions";
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + s.key },
+        body: JSON.stringify({ model: s.model || "gpt-4o-mini", temperature: 0.2, messages: [{ role: "system", content: sys }, { role: "user", content: user }] }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
+    }
+    if (s.provider === "claude") {
+      r = await fetch((base || "https://api.anthropic.com") + "/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": s.key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: s.model || "claude-sonnet-4-5", max_tokens: 8192, system: sys, messages: [{ role: "user", content: user }] }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      return (j.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+    }
+    /* gemini */
+    const m = s.model || "gemini-2.0-flash";
+    r = await fetch((base || "https://generativelanguage.googleapis.com") + "/v1beta/models/" + encodeURIComponent(m) + ":generateContent?key=" + encodeURIComponent(s.key), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: [{ role: "user", parts: [{ text: user }] }] }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    return ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || "").join("");
+  }
+
+  function aiCopyProto() {
+    const ctx = JSON.stringify(AI().exportContext(design, curPageId));
+    Bridge.copy(aiSystemPrompt() + "\n\n== 当前设计上下文 ==\n" + ctx + "\n\n== 用户需求 ==\n（在此写下你的需求）");
+    aiStatus("已复制协议与上下文——粘贴给任意 AI，把返回的 JSON 粘回下方即可应用");
+  }
+
+  /** 解析回复框内容：提取 JSON → 在设计副本上试运行校验 → 通过则启用「应用」 */
+  function aiTryParse() {
+    aiPending = null;
+    $("#aiApply").disabled = true;
+    const raw = $("#aiReply").value.trim();
+    if (!raw) return aiStatus("");
+    const ex = AI().extractJSON(raw);
+    if (!ex.ok) return aiStatus(ex.error, true);
+    const trial = AI().applyOp(JSON.parse(JSON.stringify(design)), ex.value);
+    if (!trial.ok) return aiStatus("协议校验失败：" + trial.error, true);
+    aiPending = ex.value;
+    $("#aiApply").disabled = false;
+    aiStatus("校验通过：" + trial.applied + (trial.warns.length ? "（警告 " + trial.warns.length + " 条，应用时忽略无效项）" : ""));
+  }
+
+  function aiApply() {
+    if (!aiPending) return;
+    pushHistory();
+    const rep = AI().applyOp(design, aiPending);
+    if (!rep.ok) {
+      undoStack.pop(); updateEditButtons(); /* 校验已通过仍失败（几乎不可能）：不留空历史 */
+      return aiStatus("应用失败：" + rep.error, true);
+    }
+    if (rep.pageId) curPageId = rep.pageId;
+    renderAll(); autosave();
+    aiStatus("已应用：" + rep.applied + rep.warns.map(w => "\n⚠ " + w).join(""));
+    toast("AI 已应用：" + rep.applied);
+    aiPending = null;
+    $("#aiApply").disabled = true;
+  }
+
   /* ================= 导出 / 预览 / 项目 ================= */
   function initExportPanel() {
     const panel = $("#exportpanel");
@@ -2828,6 +3004,7 @@
     initCanvas();
     initToolbar();
     initThemePanel();
+    initAIPanel();
     initExportPanel();
     initPreview();
     initCodePanel();

@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
@@ -150,6 +153,12 @@ public partial class MainWindow : Window
         Top = wa.Top + Math.Max(0, (wa.Height - Height) / 2);
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        try { _aiCts?.Cancel(); _aiTcp?.Stop(); } catch { /* 忽略 */ }
+        base.OnClosed(e);
+    }
+
     private async Task InitWeb()
     {
         var dataDir = Path.Combine(
@@ -194,5 +203,179 @@ public partial class MainWindow : Window
         };
 
         Web.CoreWebView2.Navigate("https://m3edesigner.local/index.html");
+        StartAiHttp();
+    }
+
+    /* ================= AI 本机服务（仅绑定 127.0.0.1，供 AI 工具直接操作画布） =================
+     * GET  /api/ping      探活
+     * GET  /api/context   当前设计上下文（喂给 AI）
+     * GET  /api/protocol  完整协议文档
+     * POST /api/op        应用协议操作（body 为协议 JSON 或其数组）
+     * 页面尚未就绪时请求返回错误；用 TcpListener 手写最小 HTTP，避免 HttpListener 的 URLACL 限制。 */
+
+    private TcpListener _aiTcp;
+    private CancellationTokenSource _aiCts;
+    private int _aiPort;
+
+    private void StartAiHttp()
+    {
+        _aiCts = new CancellationTokenSource();
+        Task.Run(async () =>
+        {
+            for (int port = 41289; port < 41299; port++)
+            {
+                try
+                {
+                    var l = new TcpListener(IPAddress.Loopback, port);
+                    l.Start();
+                    _aiTcp = l;
+                    _aiPort = port;
+                    break;
+                }
+                catch { /* 端口被占用，试下一个 */ }
+            }
+            if (_aiTcp == null) return;
+
+            /* 把实际端口告知页面（页面未就绪则短暂重试），面板会显示真实地址 */
+            for (int i = 0; i < 10; i++)
+            {
+                var ping = await EvalJsAsync("window.__gwAI ? (window.__gwAI.port=" + _aiPort +
+                    ", document.getElementById('aiLocalUrl') ? (document.getElementById('aiLocalUrl').textContent='http://127.0.0.1:" + _aiPort + "', 'ok') : 'ok') : 'no'");
+                if (ping == "ok") break;
+                await Task.Delay(700);
+            }
+
+            try
+            {
+                while (!_aiCts.IsCancellationRequested)
+                {
+                    var client = await _aiTcp.AcceptTcpClientAsync(_aiCts.Token);
+                    _ = Task.Run(() => ServeAiClient(client));
+                }
+            }
+            catch (OperationCanceledException) { /* 正常关闭 */ }
+            catch { /* 监听异常退出 */ }
+        });
+    }
+
+    /// <summary>在 UI 线程执行 JS 并取回其字符串结果（脚本应返回 string；页面未就绪返回 null）。</summary>
+    private async Task<string> EvalJsAsync(string expression)
+    {
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Dispatcher.InvokeAsync(async () =>
+        {
+            try
+            {
+                var raw = await Web.CoreWebView2.ExecuteScriptAsync(expression);
+                try { tcs.SetResult(JsonSerializer.Deserialize<string>(raw)); }
+                catch { tcs.SetResult(null); }
+            }
+            catch (Exception ex) { tcs.SetException(ex); }
+        });
+        return await tcs.Task;
+    }
+
+    private async Task ServeAiClient(TcpClient client)
+    {
+        try
+        {
+            using (client)
+            {
+                client.ReceiveTimeout = 5000;
+                client.SendTimeout = 5000;
+                var stream = client.GetStream();
+                var reqLine = await ReadLineAsync(stream);
+                if (string.IsNullOrWhiteSpace(reqLine)) return;
+                var parts = reqLine.Split(' ');
+                if (parts.Length < 2) return;
+                var method = parts[0].ToUpperInvariant();
+                var path = parts[1];
+                int q = path.IndexOf('?');
+                if (q >= 0) path = path.Substring(0, q);
+
+                int contentLength = 0;
+                while (true)
+                {
+                    var h = await ReadLineAsync(stream);
+                    if (h.Length == 0) break;
+                    if (h.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                        int.TryParse(h.Substring(15).Trim(), out contentLength);
+                }
+                var body = "";
+                if (contentLength > 0 && contentLength < 5_000_000)
+                {
+                    var buf = new byte[contentLength];
+                    int off = 0;
+                    while (off < contentLength)
+                    {
+                        int n = await stream.ReadAsync(buf, off, contentLength - off);
+                        if (n <= 0) break;
+                        off += n;
+                    }
+                    body = Encoding.UTF8.GetString(buf, 0, off);
+                }
+
+                string resp;
+                string route = method + " " + path;
+                if (route == "GET /api/ping" || route == "OPTIONS /api/op")
+                {
+                    resp = "{\"ok\":true,\"app\":\"gw-designer\",\"protocol\":\"v1\",\"endpoints\":[\"GET /api/ping\",\"GET /api/context\",\"GET /api/protocol\",\"POST /api/op\"]}";
+                }
+                else if (route == "GET /api/context")
+                {
+                    resp = await EvalJsAsync("window.__gwAI ? window.__gwAI.contextJson() : null")
+                        ?? "{\"ok\":false,\"error\":\"设计器页面尚未就绪\"}";
+                }
+                else if (route == "GET /api/protocol")
+                {
+                    var doc = await EvalJsAsync("window.M3E_AI ? window.M3E_AI.schemaDoc() : null");
+                    resp = doc == null
+                        ? "{\"ok\":false,\"error\":\"设计器页面尚未就绪\"}"
+                        : "{\"ok\":true,\"protocol\":" + JsonSerializer.Serialize(doc) + "}";
+                }
+                else if (route == "POST /api/op")
+                {
+                    var script = "window.__gwAI.handleOpFromJson(" + JsonSerializer.Serialize(body ?? "") + ")";
+                    resp = await EvalJsAsync(script)
+                        ?? "{\"ok\":false,\"error\":\"设计器页面尚未就绪\"}";
+                }
+                else
+                {
+                    resp = "{\"ok\":false,\"error\":\"未知端点。可用：GET /api/ping · GET /api/context · GET /api/protocol · POST /api/op（body 为协议 JSON 或其数组）\"}";
+                }
+                await WriteRespAsync(stream, resp);
+            }
+        }
+        catch { /* 单个连接失败不影响服务 */ }
+    }
+
+    private static async Task<string> ReadLineAsync(NetworkStream stream)
+    {
+        var sb = new StringBuilder();
+        var buf = new byte[1];
+        while (sb.Length < 8192)
+        {
+            int n = await stream.ReadAsync(buf, 0, 1);
+            if (n <= 0) break;
+            char c = (char)buf[0];
+            if (c == '\n') break;
+            if (c != '\r') sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    private static async Task WriteRespAsync(NetworkStream stream, string jsonBody)
+    {
+        var body = Encoding.UTF8.GetBytes(jsonBody ?? "");
+        var head = Encoding.UTF8.GetBytes(
+            "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: application/json; charset=utf-8\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Headers: content-type\r\n" +
+            "Connection: close\r\n" +
+            "Content-Length: " + body.Length + "\r\n\r\n");
+        await stream.WriteAsync(head, 0, head.Length);
+        await stream.WriteAsync(body, 0, body.Length);
+        await stream.FlushAsync();
     }
 }

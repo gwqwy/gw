@@ -10,6 +10,7 @@
 - **组件块代码**（单个组件的 HTML / Vue / JSON，右键即复制，JSON 可再粘贴回设计器）
 - **项目文件（.m3ed）** 与 **整包导出**（「导出全部」面板中自行勾选格式，写入所选文件夹）
 - **页面模板**：登录页 / 列表页 / 详情页 / 设置页 / 仪表盘 / 空状态页 / 聊天页 7 套常用骨架，页面面板「模板」按钮一键新建，按当前主题生成
+- **AI 接口**：「AI 助手」面板 + 页面协议 `M3E_AI`——AI 可直接新建/编辑设计器页面（详见下方「AI 接入」一节）
 - **组件锁定与变换**：`Ctrl+L` 锁定组件防误触（虚线标识，不可拖动/缩放/删除）；属性面板可调**透明度**与**旋转**，随 HTML/Vue 导出
 - **本地图片内嵌**：图片类组件可选本地文件转 dataURL 内嵌，导出文件自包含、离线可用
 
@@ -86,7 +87,8 @@ m3e-designer/
 │       ├── gx/              uiverse.io/galaxy 预生成数据（manifest + 11 个分类文件，gengalaxy.mjs 产出）
 │       ├── uiverse.js       Uiverse 精选 8 组件（接入主题/属性编辑）
 │       ├── codegen.js       HTML / Vue SFC / 提示词 / 组件块 生成器（纯字符串函数）
-│       └── app.js           状态 / 画布交互 / 面板 / 撤销重做 / 桥接 / 自定义组件库
+│       ├── aiapi.js         ★ AI 页面协议与应用引擎（schemaDoc/extractJSON/applyOp/exportContext，Node 可单测）
+│       └── app.js           状态 / 画布交互 / 面板 / 撤销重做 / 桥接 / 自定义组件库 / AI 助手面板
 ├── M3EDesigner/         .NET 8 WPF 壳
 │   ├── M3EDesigner.csproj
 │   ├── MainWindow.xaml(.cs)   WebView2 + 虚拟主机映射 + 桥接注册
@@ -96,7 +98,7 @@ m3e-designer/
     ├── genicon.mjs       生成应用图标 icon.ico（纯 Node 光栅化，无需图像库）
     ├── gengalaxy.mjs     从 tools/galaxy/（uiverse-io/galaxy 浅克隆）生成 designer/js/gx/ 数据
     ├── check_gx.cjs      校验 gx 数据隔离质量（id 重映射 / keyframes 改名 / fixed 矫正）
-    └── test_codegen.cjs  代码生成自测（Node 直接运行，84 项断言）
+    └── test_codegen.cjs  代码生成自测（Node 直接运行，102 项断言）
 ```
 
 ## 构建与运行
@@ -146,6 +148,45 @@ dotnet publish -c Release -r win-x64 --self-contained true ^
 | P / 0 | 在浏览器预览 / 适应窗口 |
 | 滚轮 / Ctrl+滚轮 | 平移 / 缩放画布 |
 | 右键组件 | 复制组件代码（HTML / Vue / JSON）、层级、删除 |
+
+## AI 接入（新建 / 编辑页面）
+
+顶部「AI」按钮打开 **AI 助手**面板，两种方式让 AI 直接操作设计器画布：
+
+1. **直连模式（需 API Key）**：选择服务商（OpenAI / Claude / Gemini / DeepSeek）、填模型名与 Key（**仅保存在本机** localStorage，请求由浏览器/WebView2 直连服务商），用自然语言描述需求 → AI 按协议返回 JSON → 本地做白名单校验、边界钳制、跳转解析后一键应用到画布。
+2. **离线工作流（无需 Key）**：点「复制协议与上下文」→ 粘贴给任意 AI（Claude Code、ZCode、网页版均可）→ 把它返回的 JSON 粘回面板「AI 回复」框 → 「应用到设计」。
+3. **本机直连服务（AI 全自动）**：应用启动后内置服务监听 `http://127.0.0.1:41289`（仅回环地址，端口占用时依次尝试至 41298；实际地址显示在 AI 面板），AI 工具可直接读写画布，全程无需人工粘贴：
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /api/ping` | 探活 |
+| `GET /api/context` | 当前设计上下文（喂给 AI） |
+| `GET /api/protocol` | 完整协议文档 |
+| `POST /api/op` | 应用一个或一组协议操作（body 为协议 JSON 或其数组，依次应用失败即停） |
+
+```bash
+# 探活与读取当前设计
+curl http://127.0.0.1:41289/api/ping
+curl http://127.0.0.1:41289/api/context
+
+# 让 AI 直接新建页面（cmd 示例）
+curl -X POST http://127.0.0.1:41289/api/op -H "content-type: application/json" ^
+  -d "{\"op\":\"createPage\",\"page\":{\"name\":\"AI 页面\"},\"items\":[{\"kind\":\"topAppBar\",\"x\":0,\"y\":0,\"label\":\"由 AI 创建\"},{\"kind\":\"button\",\"x\":16,\"y\":120,\"label\":\"开始使用\"}]}"
+```
+
+**协议要点**（全文见 `M3E_AI.schemaDoc()` 或面板复制）：AI 输出一个 `{op, ...}` JSON——
+
+| op | 作用 |
+| --- | --- |
+| `createPage` | 新建页面（名称/类型/背景）并放置组件 |
+| `addItems` | 向指定页面追加组件 |
+| `updateItem` | 按 `match`（kind/label/name+index）定位，`patch` 合并修改 |
+| `deleteItems` | 按 `match` 删除所有命中组件 |
+| `setTheme` | 改色板/深色/形状 |
+
+安全设计：组件 `kind` 与字段均为白名单，未知类型/字段降级为警告并跳过；坐标尺寸越界自动钳回页面；`action` 填页面名称自动解析为内部 id，解析失败移除跳转——**非法输入不会污染设计**。每次应用记入撤销栈，可 Ctrl+Z 回退。
+
+控制台 API（可在 WebView2 DevTools 或外部自动化里编程调用）：`window.M3E_AI.applyOp(M3E_AI.design(), {op:"createPage", ...})`；`M3E_AI.exportContext(M3E_AI.design(), null)` 导出上下文。
 
 ## 数据说明
 

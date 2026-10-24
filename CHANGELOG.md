@@ -12,6 +12,13 @@
 - 组件**锁定**：`Ctrl+L` 或右键「锁定」，锁定后不可拖动/缩放/删除；画布虚线标识、图层面板带锁标，删除/方向键微移/对齐分布自动跳过锁定组件
 - 组件**透明度**与**旋转**：属性面板通用字段，画布预览与 HTML/Vue 导出同步生效；默认值（100% / 0°）不写入样式，保持产物干净
 - **本地图片内嵌**：图片类组件「选择图片」弹窗重做——支持本地文件（自动转 dataURL 内嵌，≤2MB 校验）或 URL，预览即所见；导出文件自包含、离线可用
+- **AI 接口（`M3E_AI` 协议 v1）**：新增「AI 助手」面板，AI 可直接新建/编辑设计器页面
+  - 协议五种操作：`createPage`（新建页面+组件）/ `addItems` / `updateItem`（match 定位 + patch 合并）/ `deleteItems` / `setTheme`
+  - 直连模式：自带 Key 直连 OpenAI / Claude / Gemini / DeepSeek（Key 仅存本机），自然语言 → 协议 JSON → 本地校验后一键应用
+  - 离线工作流：「复制协议与上下文」粘贴给任意 AI（Claude Code / ZCode / 网页版），返回 JSON 粘回即应用，无需 Key
+  - 安全设计：组件类型与字段白名单、坐标边界钳制、action 页面名自动解析为内部 id；非法输入被拒绝或降级为警告，不污染设计；每次应用可撤销
+  - 控制台 API：`window.M3E_AI.applyOp(M3E_AI.design(), {...})` 可编程操作设计
+  - **本机直连服务**：应用内置 `http://127.0.0.1:41289`（仅回环绑定，端口占用自动顺延）——`GET /api/ping` / `GET /api/context` / `GET /api/protocol` / `POST /api/op`（支持操作数组，依次应用失败即停），AI 工具（ZCode / Claude Code / 任意脚本）可不经人工粘贴直接读取设计上下文并操作画布
 
 ### 优化
 
