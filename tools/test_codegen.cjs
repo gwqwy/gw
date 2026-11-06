@@ -262,6 +262,43 @@ ok(AI.applyOp(dAI, { op: "wat" }).ok === false, "未知 op 报错");
 const ctxAI = AI.exportContext(dAI, pgAI.id);
 ok(ctxAI.currentPage === "登录" && ctxAI.pages.length === 2 && ctxAI.pages[1].items.some(i => i.kind === "textField"), "exportContext 输出含当前页的紧凑上下文");
 
+/* v1.3.0：React 导出 / 响应式 HTML / 主题令牌 */
+console.log("== v1.3.0 导出增强 ==");
+const rj = GEN.reactJsx(p, design);
+ok(rj.includes("import { useState, useEffect }") && rj.includes("export default function Page_"), "React 组件结构与导入齐全");
+ok(!/ class="/.test(rj), "React 模板无原生 class 属性");
+ok(!/ style="/.test(rj), "React 模板无字符串 style（均为对象字面量）");
+ok(/onClick=\{\(\) => set\w+\(!\w+\)\}/.test(rj), "开关切换为 React 状态取反");
+ok(rj.includes('" sel" : ""') && rj.includes("setSel_"), "页签选中态由 React 状态驱动");
+ok(rj.includes(`"--pri": "#6750A4"`), "配色变量以自定义属性写入 pageStyle");
+ok((rj.match(/className="m3e-item"/g) || []).length >= 70, "React 条目外壳齐全");
+const rjQ = GEN.reactJsx(q, design);
+ok(rjQ.includes("1280"), "React 桌面页尺寸正确");
+const snipReact = GEN.itemSnippet(p.items.find(i => i.kind === "switch"), design, "react");
+ok(snipReact.includes("useState") && /onClick=\{\(\) => set\w+\(!\w+\)\}/.test(snipReact), "React 单组件片段含状态与点击");
+const snipReactSlider = GEN.itemSnippet(p.items.find(i => i.kind === "slider"), design, "react");
+ok(snipReactSlider.includes("bindSlider") && snipReactSlider.includes("useEffect"), "React 滑块片段含接线与 effect");
+
+/* 响应式导出：同名手机 + 桌面页合并双宽 */
+const dR = { name: "自适应测试", theme: { palette: "purple", dark: false, shape: "rounded" }, pages: [] };
+const rp1 = T.defaultPage("落地页", "phone");
+const rp2 = T.defaultPage("落地页", "desktop");
+rp1.items.push(REG.create("button", 8, 8, dR.theme));
+rp2.items.push(REG.create("button", 8, 8, dR.theme));
+dR.pages.push(rp1, rp2);
+const respHtml = GEN.htmlDoc(dR, { responsive: true });
+ok(respHtml.includes("m3e-page-dev-phone") && respHtml.includes("m3e-page-dev-desktop"), "自适应导出含双设备变体");
+ok(respHtml.includes("@media") && respHtml.includes("data-pname"), "自适应含媒体查询与页面名标记");
+ok(respHtml.includes("offsetParent") && respHtml.includes("data-link"), "响应式跳转回退脚本已注入");
+ok(GEN.htmlDoc(dR).includes("m3e-page-dev-") === false, "普通导出不受响应式影响");
+ok(GEN.htmlDoc(dR, { pages: [rp1] }).includes("data-pname") === false, "单页导出不受响应式影响");
+
+/* 主题令牌 */
+const tokCss = GEN.themeTokensCss(design);
+ok(tokCss.includes("--pri: #6750A4") && tokCss.startsWith("/*"), "令牌 CSS 含主色与注释头");
+const tokJson = JSON.parse(GEN.themeTokensJson(design));
+ok(tokJson.colors["--pri"] === "#6750A4" && tokJson.geometry.phone.w === 412, "令牌 JSON 含色板与几何");
+
 /* 提示词 */
 console.log("== 提示词 ==");
 const prompt = GEN.prompt(design, { target: "vue" });

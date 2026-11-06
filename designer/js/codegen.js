@@ -52,7 +52,7 @@
   }
 
   /* ---------- 导出 HTML 的交互脚本 ---------- */
-  function interScript() {
+  function interScript(responsive) {
     return `
   // —— gw Designer 导出交互 ——
   (function () {
@@ -124,7 +124,28 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
-  })();`.trim();
+  })();${responsive ? `
+  // —— 自适应：跳转目标在当前视口隐藏时，滚动到同名的可见变体 ——
+  (function () {
+    function visible(el) { return !!(el && el.offsetParent); }
+    document.querySelectorAll('[data-link]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.getAttribute('data-link');
+        if (!id) return;
+        var t = document.getElementById('page-' + id);
+        if (t && !visible(t) && t.getAttribute('data-pname')) {
+          var name = t.getAttribute('data-pname');
+          var all = document.querySelectorAll('.m3e-page[data-pname]');
+          for (var i = 0; i < all.length; i++) {
+            if (all[i].getAttribute('data-pname') === name && visible(all[i])) {
+              all[i].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+              break;
+            }
+          }
+        }
+      });
+    });
+  })();` : ""}`;
   }
 
   /** 条目导出时的 data-act 注入（交互类型） */
@@ -176,16 +197,32 @@
   function htmlDoc(design, opts) {
     opts = opts || {};
     const pages = opts.pages || design.pages;
-    const body = pages.map(p => {
+    const responsive = !!opts.responsive;
+    /* 响应式模式：同名页面（手机稿 + 桌面稿）合并为一个框架双宽并置，媒体查询按视口切换；
+     * 跳转目标在当前视口隐藏时，interScript 的回退逻辑滚动到同名可见变体。 */
+    const nameCount = {};
+    pages.forEach(p => { const n = String(p.name); nameCount[n] = (nameCount[n] || 0) + 1; });
+    const emitted = new Set();
+    const frames = [];
+    for (const p of pages) {
       const size = T.pageSize(p);
       const radius = p.kind === "desktop" ? T.DESKTOP_R : T.PHONE_R;
       const items = renderPageItems(p, design.theme, true);
-      return `  <div class="m3e-export-frame">
-  <div class="m3e-page" id="page-${esc(p.id)}" style="${pageVarsStyle(design.theme, p)}width:${size.w}px;height:${size.h}px;border-radius:${radius}px;">
+      const merged = responsive && nameCount[String(p.name)] > 1;
+      if (merged && emitted.has(String(p.name))) continue;
+      if (merged) emitted.add(String(p.name));
+      const devCls = merged ? ` m3e-page-dev-${p.kind === "desktop" ? "desktop" : "phone"}` : "";
+      const pname = merged ? ` data-pname="${esc(p.name)}"` : "";
+      frames.push(`  <div class="m3e-export-frame">
+  <div class="m3e-page${devCls}" id="page-${esc(p.id)}"${pname} style="${pageVarsStyle(design.theme, p)}width:${size.w}px;height:${size.h}px;border-radius:${radius}px;">
       ${items}
     </div>
-  </div>`;
-    }).join("\n");
+  </div>`);
+    }
+    const respCss = responsive ? `
+/* —— 同名页面双宽自适应：≤900px 显示手机稿，>900px 显示桌面稿 —— */
+@media (max-width: 900px){ .m3e-page-dev-desktop{display:none;} }
+@media (min-width: 901px){ .m3e-page-dev-phone{display:none;} }` : "";
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -197,13 +234,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;}
-${CSS()}
+${CSS()}${respCss}
 </style>
 </head>
 <body class="m3e-export-body">
-${body}
+${frames.join("\n")}
 <script>
-${interScript()}
+${interScript(responsive)}
 </script>
 </body>
 </html>`;
@@ -381,6 +418,218 @@ body{margin:0;background:#ECE6F0;display:flex;justify-content:center;align-items
 `;
   }
 
+  /* ---------- React 导出（HTML → JSX 转换 + 函数组件） ---------- */
+  const kebab2camel = k => k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+
+  /** CSS 内联字符串 → JSX style 对象字面量（自定义属性 --x 保持带引号键） */
+  function cssToObj(css) {
+    const entries = String(css || "").split(";").map(s => s.trim()).filter(Boolean).map(s => {
+      const i = s.indexOf(":");
+      if (i < 0) return null;
+      const k = kebab2camel(s.slice(0, i).trim());
+      const v = s.slice(i + 1).trim();
+      return /^[A-Za-z][A-Za-z0-9]*$/.test(k) ? k + ":" + JSON.stringify(v) : JSON.stringify(k) + ":" + JSON.stringify(v);
+    }).filter(Boolean);
+    return "{" + entries.join(",") + "}";
+  }
+
+  /** HTML 片段 → JSX：class→className、style 字符串→对象（SVG 连字符属性由 React 16+ 原生透传） */
+  function convertJsx(html) {
+    return String(html).replace(/class=/g, "className=").replace(/style="([^"]*)"/g, (m, css) => "style={" + cssToObj(css) + "}");
+  }
+
+  /** 根标签的状态类改为按 React 状态拼接，并注入 onClick（inner 需已经过 convertJsx） */
+  function reactRootState(inner, id, setExpr, stateCls) {
+    const m = inner.match(/^<(\w+)([^>]*)>/);
+    if (!m) return inner;
+    let attrs = m[2];
+    const cm = attrs.match(/\sclassName="([^"]*)"/);
+    let base = cm ? cm[1] : "";
+    if (cm) attrs = attrs.replace(cm[0], "");
+    base = base.replace(new RegExp("(^|\\s)" + stateCls + "(?=\\s|$)"), "").trim();
+    const dyn = `className={${id} ? "${base} ${stateCls}" : "${base}"}`;
+    return inner.replace(m[0], `<${m[1]}${attrs} ${dyn} onClick={() => ${setExpr}}>`);
+  }
+
+  /** 页签类组件的 React 结构（与 tabsVue 同一套 tabsMeta 数据）；返回 null 表示保持静态渲染 */
+  function reactTabsInner(it, def, id, setup, reg) {
+    if (def.inter !== "tabs" || def.tabsMeta === null) return null;
+    const tabs = it.tabs || [];
+    setup.push(`  const [sel_${id}, setSel_${id}] = useState(${it.selected || 0});`);
+    const tm = def.tabsMeta ? def.tabsMeta(it, reg) : { wrap: `m3e-tabs${it.indStyle === "underline" ? " underline" : ""}`, child: "tab" };
+    const items = tabs.map((t, i) => {
+      const ind = tm.ind ? `<div className="ind">${reg.ic(t.icon, 24, i === it.selected)}</div>` : (t.icon ? reg.ic(t.icon, 18) : "");
+      const label = tm.label === "" ? "" : `<span${tm.label ? ` className="${tm.label}"` : ""}>${esc(t.label)}</span>`;
+      return `<div className={"${tm.child}" + (sel_${id}===${i} ? " sel" : "")} onClick={() => setSel_${id}(${i})}>${convertJsx(ind)}${label}</div>`;
+    }).join("");
+    return `<div className="${tm.wrap}">${tm.pre ? convertJsx(tm.pre) : ""}${items}</div>`;
+  }
+
+  const REACT_BIND_SLIDER = `function bindSlider(root) {
+  if (!root) return;
+  const fil = root.querySelector(".fil"), hnd = root.querySelector(".hnd");
+  function set(p) {
+    p = Math.max(0, Math.min(100, p));
+    if (fil) fil.style.width = "calc(" + p + "% - 2px)";
+    if (hnd) hnd.style.left = p + "%";
+  }
+  root.style.cursor = "pointer";
+  root.addEventListener("pointerdown", function (e) {
+    const r = root.getBoundingClientRect();
+    set((e.clientX - r.left) / r.width * 100);
+    const move = function (ev) {
+      const r2 = root.getBoundingClientRect();
+      set((ev.clientX - r2.left) / r2.width * 100);
+    };
+    const up = function () {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}`;
+
+  /** React 函数组件（单页）：开关/单选/页签为 React 状态；跳转/弹窗/滑块挂载后接线 */
+  function reactJsx(page, design) {
+    const reg = R();
+    const theme = design.theme;
+    const setup = [];
+    const sliderLines = [];
+    const popupSetters = [];
+
+    function renderX(it) {
+      const def = reg.defs[it.kind];
+      it._theme = theme;
+      const shell = reg.shellStyle(it);
+      const act = it.action ? ` data-link="${esc(it.action)}"` : "";
+      const id = safeId(it.id);
+      const cap = id.charAt(0).toUpperCase() + id.slice(1);
+      let inner;
+      if (def.inter === "toggle") {
+        setup.push(`  const [${id}, set${cap}] = useState(${!!it.checked});`);
+        inner = reactRootState(convertJsx(def.render(it)), id, `set${cap}(!${id})`, "on");
+      } else if (def.inter === "radio") {
+        setup.push(`  const [${id}, set${cap}] = useState(${!!it.checked});`);
+        inner = reactRootState(convertJsx(def.render(it)), id, `set${cap}(true)`, "on");
+      } else if (def.inter === "tabs") {
+        const t2 = reactTabsInner(it, def, id, setup, reg);
+        inner = t2 == null ? convertJsx(def.render(it)) : t2;
+      } else if (def.inter === "slider") {
+        inner = convertJsx(def.render(it)).replace(/^<div/, `<div data-sid="${id}"`);
+        sliderLines.push(`    bindSlider(document.querySelector('[data-sid="${id}"]'));`);
+      } else {
+        inner = convertJsx(def.render(it));
+      }
+      return `      <div className="m3e-item" style={${cssToObj(shell)}}${act}>\n        ${inner}\n      </div>`;
+    }
+
+    const groups = page.groups || [];
+    const popupGroups = groups.filter(g => g.popup);
+    const inPopup = it => it.gid && popupGroups.some(g => g.id === it.gid);
+    const items = [];
+    for (const it of page.items) {
+      if (!inPopup(it)) items.push(renderX(it));
+    }
+    for (const g of popupGroups) {
+      const pid = safeId(g.id);
+      setup.push(`  const [pop_${pid}, setPop_${pid}] = useState(false);`);
+      popupSetters.push(`    "${g.id}": setPop_${pid}`);
+      const members = page.items.filter(it => it.gid === g.id).map(renderX);
+      items.push(`      <div className={"m3e-popup" + (pop_${pid} ? " open" : "")} data-gid="${esc(g.id)}" onClick={e => { if (e.target === e.currentTarget) setPop_${pid}(false); }}>\n${members.join("\n")}\n      </div>`);
+    }
+    const size = T.pageSize(page);
+    const radius = page.kind === "desktop" ? T.DESKTOP_R : T.PHONE_R;
+    const varsEntries = Object.entries(T.schemeVars(T.activeScheme(theme))).map(([k, v]) => `  "${k}": "${v}",`).join("\n");
+    const comp = "Page_" + safeId(page.id);
+    const hasPopup = popupGroups.length > 0;
+    const wireBody = `    root.querySelectorAll('[data-link]').forEach(function (el) {
+      const l = el.getAttribute("data-link");
+      if (!l) return;
+      if (l.indexOf("popup:") === 0) {
+        el.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const setter = popupSetters[l.slice(6)];
+          if (setter) setter(true);
+        });
+      } else if (l === "closepop") {
+        el.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const p = el.closest(".m3e-popup");
+          if (p && p.getAttribute("data-gid")) {
+            const setter = popupSetters[p.getAttribute("data-gid")];
+            if (setter) setter(false);
+          }
+        });
+      } else {
+        el.addEventListener("click", function () { console.log("跳转到页面:", l); });
+      }
+    });`;
+
+    return `/*
+  gw Designer 导出 — 页面「${page.name}」(${size.w}×${size.h})
+  React 18 函数组件：开关/单选/页签为 React 状态；跳转、弹窗遮罩、滑块在挂载后接线。
+  用法：import ${comp} from "./${page.name}.jsx"; 渲染 <${comp} />（需 react / react-dom 18+）。
+*/
+import { useState, useEffect } from "react";
+
+${REACT_BIND_SLIDER}
+
+const pageStyle = {
+  width: "${size.w}px",
+  height: "${size.h}px",
+  borderRadius: "${radius}px",
+${varsEntries}
+  ${page.bg ? `"background": "${page.bg}",` : ""}
+};
+
+export default function ${comp}() {
+${setup.join("\n")}${hasPopup ? `\n  const popupSetters = {\n${popupSetters.join(",\n")}\n  };` : ""}
+
+  useEffect(() => {
+    const root = document.querySelector(".page-root");
+    if (!root) return;
+${wireBody}
+${sliderLines.join("\n")}
+  }, []);
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="m3e-page page-root" style={pageStyle}>
+${items.join("\n")}
+      </div>
+    </>
+  );
+}
+
+const css = \`
+${CSS()}
+\`;
+`;
+  }
+
+  /* ---------- 主题令牌导出 ---------- */
+  function themeTokensCss(design) {
+    const vars = T.schemeVars(T.activeScheme(design.theme));
+    let s = `/* gw Designer 设计令牌 — ${design.name || "未命名"}（${design.theme.dark ? "深色" : "浅色"} / ${design.theme.palette} / ${design.theme.shape}） */\n:root{\n`;
+    for (const k in vars) s += `  ${k}: ${vars[k]};\n`;
+    return s + "}\n";
+  }
+  function themeTokensJson(design) {
+    return JSON.stringify({
+      __m3eTokens: 1,
+      name: design.name,
+      theme: design.theme,
+      colors: T.schemeVars(T.activeScheme(design.theme)),
+      geometry: {
+        phone: { w: T.PHONE_W, h: T.PHONE_H, radius: T.PHONE_R },
+        desktop: { w: T.DESKTOP_W, h: T.DESKTOP_H, radius: T.DESKTOP_R },
+        margin: T.MARGIN,
+      },
+    }, null, 2);
+  }
+
   /* ---------- 位置描述（提示词用） ---------- */
   function posDesc(it, page) {
     const size = T.pageSize(page);
@@ -516,6 +765,41 @@ ${CSS()}
 </style>
 `;
     }
+    if (format === "react") {
+      const id = safeId(it.id);
+      const cap = id.charAt(0).toUpperCase() + id.slice(1);
+      const setup = [];
+      const isSlider = def.inter === "slider";
+      let inner;
+      if (def.inter === "toggle") {
+        setup.push(`  const [${id}, set${cap}] = useState(${!!it.checked});`);
+        inner = reactRootState(convertJsx(def.render(it)), id, `set${cap}(!${id})`, "on");
+      } else if (def.inter === "radio") {
+        setup.push(`  const [${id}, set${cap}] = useState(${!!it.checked});`);
+        inner = reactRootState(convertJsx(def.render(it)), id, `set${cap}(true)`, "on");
+      } else if (def.inter === "tabs") {
+        const t2 = reactTabsInner(it, def, id, setup, reg);
+        inner = t2 == null ? convertJsx(def.render(it)) : t2;
+      } else if (isSlider) {
+        inner = convertJsx(def.render(it)).replace(/^<div/, `<div data-sid="${id}"`);
+      } else {
+        inner = convertJsx(def.render(it));
+      }
+      return `/* 组件：${def.name}（来自 gw Designer） */
+import { useState${isSlider ? ", useEffect" : ""} } from "react";
+${isSlider ? "\n" + REACT_BIND_SLIDER + "\n" : ""}
+export default function Comp() {
+${setup.join("\n") || "  // 无状态"}${isSlider ? `\n  useEffect(() => {\n    bindSlider(document.querySelector('[data-sid="${id}"]'));\n  }, []);` : ""}
+
+  return (
+    ${inner}
+  );
+}
+${isSlider ? "" : `
+/* 需在页面引入 m3e 样式与配色变量，例如：
+   <style>{\`:root{--pri:#6750A4;--on-pri:#FFFFFF;...}\`}</style>
+   完整变量见设计器「导出全部 → 主题令牌」。 */`}`;
+    }
     /* html：独立可运行小文档 */
     const p = itemHTMLAct(it, { theme: design.theme });
     return `<!DOCTYPE html>
@@ -540,5 +824,5 @@ ${def.inter ? interScript() : ""}
 </html>`;
   }
 
-  window.M3E_GEN = { itemHTML, itemHTMLi, itemInner, pageHTML, htmlDoc, vueSFC, prompt, itemSnippet, interScript, pageVarsStyle, posDesc };
+  window.M3E_GEN = { itemHTML, itemHTMLi, itemInner, pageHTML, htmlDoc, vueSFC, reactJsx, themeTokensCss, themeTokensJson, prompt, itemSnippet, interScript, pageVarsStyle, posDesc };
 })();

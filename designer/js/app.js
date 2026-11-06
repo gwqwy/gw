@@ -2334,6 +2334,7 @@
     m.appendChild(document.createElement("hr"));
     add("复制组件代码 HTML", () => copyItemCode("html"), "code");
     add("复制组件代码 Vue", () => copyItemCode("vue"), "code");
+    add("复制组件代码 React", () => copyItemCode("react"), "code");
     add("复制组件 JSON", () => copyItemCode("json"), "data_object");
     m.appendChild(document.createElement("hr"));
     add("置顶", () => reorder("top"), "upload");
@@ -2482,23 +2483,26 @@
       if (arr.length > 1) return "// 多选状态请单选一个组件，或切换范围为「当前页面」";
       if (codeTab === "json") return GEN.itemSnippet(arr[0], design, "json");
       if (codeTab === "prompt") return GEN.prompt(design, { pages: [page], target: $("#promptTarget").value });
+      if (codeTab === "react") return GEN.itemSnippet(arr[0], design, "react");
       return GEN.itemSnippet(arr[0], design, codeTab === "html" ? "html" : "vue");
     }
     if (codeScope === "page") {
       if (codeTab === "json") return JSON.stringify(design, null, 2);
       if (codeTab === "prompt") return GEN.prompt(design, { pages: [page], target: $("#promptTarget").value });
+      if (codeTab === "react") return GEN.reactJsx(page, design);
       if (codeTab === "vue") return GEN.vueSFC(page, design);
       return GEN.htmlDoc(design, { pages: [page] });
     }
     /* all */
     if (codeTab === "json") return JSON.stringify(design, null, 2);
     if (codeTab === "prompt") return GEN.prompt(design, { target: $("#promptTarget").value });
+    if (codeTab === "react") return design.pages.map(p => `/* ======== ${p.name} ======== */\n` + GEN.reactJsx(p, design)).join("\n\n");
     if (codeTab === "vue") return design.pages.map(p => `<!-- ======== ${p.name} ======== -->\n` + GEN.vueSFC(p, design)).join("\n\n");
     return GEN.htmlDoc(design);
   }
   function renderCode() {
     $("#codeArea").value = genCode();
-    $("#codeInfo").textContent = `${{ html: "HTML", vue: "Vue 3", json: "项目 JSON", prompt: "AI 提示词" }[codeTab]} · ${{ sel: "选中组件", page: "当前页面", all: "全部设计" }[codeScope]} · ${$("#codeArea").value.length} 字符`;
+    $("#codeInfo").textContent = `${{ html: "HTML", vue: "Vue 3", react: "React", json: "项目 JSON", prompt: "AI 提示词" }[codeTab]} · ${{ sel: "选中组件", page: "当前页面", all: "全部设计" }[codeScope]} · ${$("#codeArea").value.length} 字符`;
   }
   function initCodePanel() {
     $("#rtDesign").addEventListener("click", () => setRightMode(false));
@@ -2518,6 +2522,7 @@
       const map = {
         html: [`${nm}-${safeFileName(page.name)}.html`, "HTML 文件|*.html"],
         vue: [`${nm}-${safeFileName(page.name)}.vue`, "Vue 文件|*.vue"],
+        react: [`${nm}-${safeFileName(page.name)}.jsx`, "React JSX|*.jsx"],
         json: [`${nm}.m3ed`, "M3E 设计|*.m3ed"],
         prompt: [`${nm}-提示词.md`, "Markdown|*.md"],
       }[codeTab];
@@ -2729,10 +2734,18 @@
       const files = [];
       if (want.html) {
         for (const p of design.pages) files.push({ name: safeFileName(p.name) + ".html", content: GEN.htmlDoc(design, { pages: [p] }) });
-        files.push({ name: "index.html", content: GEN.htmlDoc(design) });
+      }
+      if (want.html || want.responsive) {
+        /* index.html：勾选「自适应」时同名手机/桌面页合并双宽、按视口自动切换 */
+        files.push({ name: "index.html", content: GEN.htmlDoc(design, { responsive: !!want.responsive }) });
       }
       if (want.vue) for (const p of design.pages) files.push({ name: safeFileName(p.name) + ".vue", content: GEN.vueSFC(p, design) });
+      if (want.react) for (const p of design.pages) files.push({ name: safeFileName(p.name) + ".jsx", content: GEN.reactJsx(p, design) });
       if (want.prompt) files.push({ name: "提示词.md", content: GEN.prompt(design, { target: $("#promptTarget").value }) });
+      if (want.tokens) {
+        files.push({ name: "设计令牌.css", content: GEN.themeTokensCss(design) });
+        files.push({ name: "设计令牌.json", content: GEN.themeTokensJson(design) });
+      }
       if (want.project) files.push({ name: (safeFileName(design.name) || "design") + ".m3ed", content: JSON.stringify(design, null, 2) });
       if (!files.length) return toast("请至少勾选一种格式");
       const n = Bridge.writeFiles(folder, files);

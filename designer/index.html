@@ -98,6 +98,7 @@
         <div id="codeTabs">
           <button data-tab="html" class="on">HTML</button>
           <button data-tab="vue">Vue</button>
+          <button data-tab="react">React</button>
           <button data-tab="prompt">提示词</button>
           <button data-tab="json">JSON</button>
         </div>
@@ -128,8 +129,11 @@
 <div id="exportpanel">
   <div class="sec-t"><span class="m3e-ic" data-ic="download"></span>选择导出格式</div>
   <label class="exp-opt"><input type="checkbox" data-x="html" checked/><span></span><span class="m3e-ic" data-ic="code"></span>HTML 文件<small>每屏一个 + index</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="responsive" checked/><span></span><span class="m3e-ic" data-ic="devices"></span>自适应 index<small>同名手机/桌面按视口切换</small></label>
   <label class="exp-opt"><input type="checkbox" data-x="vue" checked/><span></span><span class="m3e-ic" data-ic="data_object"></span>Vue 3 组件<small>每屏一个 .vue</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="react" checked/><span></span><span class="m3e-ic" data-ic="data_object"></span>React 组件<small>每屏一个 .jsx</small></label>
   <label class="exp-opt"><input type="checkbox" data-x="prompt" checked/><span></span><span class="m3e-ic" data-ic="text_snippet"></span>AI 提示词<small>提示词.md</small></label>
+  <label class="exp-opt"><input type="checkbox" data-x="tokens" checked/><span></span><span class="m3e-ic" data-ic="palette"></span>主题令牌<small>设计令牌.css / .json</small></label>
   <label class="exp-opt"><input type="checkbox" data-x="project" checked/><span></span><span class="m3e-ic" data-ic="save"></span>项目文件<small>.m3ed 可再次编辑</small></label>
   <div class="btnrow"><button class="mini primary" id="doExport"><span class="m3e-ic" data-ic="folder_open"></span>导出到文件夹…</button></div>
   <div class="hint">HTML / Vue 可直接运行；提示词可粘贴给 Claude Code、Cursor 等 AI 工具。</div>
